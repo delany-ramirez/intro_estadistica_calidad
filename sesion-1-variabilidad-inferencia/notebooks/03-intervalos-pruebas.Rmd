@@ -1,0 +1,169 @@
+---
+title: "03 · Del intervalo de confianza a la prueba de hipótesis"
+subtitle: "Sesión 1 — Variabilidad, normalidad e inferencia"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Visualizar las distribuciones $t$, $\chi^2$ y $F$ y obtener sus cuantiles en R.
+- Construir IC para la media y la desviación estándar de una característica de calidad.
+- Plantear y resolver pruebas para una media y una varianza; leer el valor p.
+- Ver por simulación el significado de $\alpha$, del error tipo II y de la "confianza".
+
+**Paquetes:** `tidyverse`, `knitr`.
+
+> Teoría: [`../teoria/04-intervalos-confianza.md`](../teoria/04-intervalos-confianza.md) y
+> [`../teoria/05-pruebas-hipotesis.md`](../teoria/05-pruebas-hipotesis.md).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+theme_set(theme_minimal(base_size = 12))
+set.seed(2026)
+```
+
+## 1. Las tres distribuciones muestrales
+
+```{r distribuciones, fig.height = 3.5}
+x <- seq(-4, 4, length.out = 400)
+bind_rows(
+  tibble(x, densidad = dnorm(x), dist = "N(0,1)"),
+  tibble(x, densidad = dt(x, 3), dist = "t con 3 gl"),
+  tibble(x, densidad = dt(x, 24), dist = "t con 24 gl")
+) |>
+  ggplot(aes(x, densidad, colour = dist)) + geom_line(linewidth = 1) +
+  labs(title = "La t tiene colas más pesadas que la normal", colour = NULL)
+
+x2 <- seq(0.01, 45, length.out = 400)
+p_chi <- tibble(x = x2, `5 gl` = dchisq(x2, 5), `24 gl` = dchisq(x2, 24)) |>
+  pivot_longer(-x, names_to = "gl", values_to = "densidad") |>
+  ggplot(aes(x, densidad, colour = gl)) + geom_line(linewidth = 1) +
+  labs(title = "Ji cuadrado", colour = NULL)
+xf <- seq(0.01, 4, length.out = 400)
+p_f <- tibble(x = xf, `F(14, 17)` = df(xf, 14, 17), `F(4, 10)` = df(xf, 4, 10)) |>
+  pivot_longer(-x, names_to = "gl", values_to = "densidad") |>
+  ggplot(aes(x, densidad, colour = gl)) + geom_line(linewidth = 1) +
+  labs(title = "F", colour = NULL)
+p_chi; p_f
+```
+
+```{r cuantiles}
+tibble(
+  cuantil = c("t(0.025; 24)", "chi2 sup (0.025; 24)", "chi2 inf (0.975; 24)", "F(0.025; 14, 17)"),
+  valor = c(qt(0.975, 24), qchisq(0.975, 24), qchisq(0.025, 24), qf(0.975, 14, 17))
+) |> kable(digits = 3, caption = "Valores críticos (área α/2 a la derecha)")
+```
+
+## 2. IC para la media y la desviación: espesor de recubrimiento
+
+Objetivo del proceso: **50 µm**. Requisito de uniformidad: $\sigma \le 2.5$ µm.
+
+```{r espesor}
+espesor <- read_csv("../datos/espesor-recubrimiento.csv")$espesor_um
+n <- length(espesor); ybar <- mean(espesor); s <- sd(espesor)
+c(n = n, media = ybar, s = s) |> round(3)
+```
+
+```{r ic-media}
+alpha <- 0.05
+semiancho <- qt(1 - alpha / 2, n - 1) * s / sqrt(n)
+c(inferior = ybar - semiancho, superior = ybar + semiancho) |> round(2)
+t.test(espesor, mu = 50)$conf.int   # mismo resultado
+```
+
+```{r ic-sigma}
+ic_var <- (n - 1) * s^2 / qchisq(c(1 - alpha / 2, alpha / 2), n - 1)
+c(sigma_inf = sqrt(ic_var[1]), sigma_sup = sqrt(ic_var[2])) |> round(3)
+```
+
+- El IC de la media **no contiene 50 µm**: el proceso está centrado por encima del objetivo.
+- El IC para $\sigma$ queda por debajo de 2.5 µm: la uniformidad es adecuada.
+
+## 3. Prueba para una media: humedad del café
+
+La norma de comercialización exige humedad ≤ 12 %; el beneficio fija una **meta de 11 %**.
+¿Hay evidencia de que la humedad promedio **supera** la meta?
+
+$$H_0: \mu \le 11 \qquad H_1: \mu > 11 \qquad \alpha = 0.05$$
+
+```{r humedad}
+humedad <- read_csv("../datos/humedad-cafe.csv")$humedad_pct
+shapiro.test(humedad)$p.value          # supuesto de normalidad
+prueba <- t.test(humedad, mu = 11, alternative = "greater")
+prueba
+```
+
+```{r humedad-manual}
+t0 <- (mean(humedad) - 11) / (sd(humedad) / sqrt(length(humedad)))
+c(t0 = t0, valor_p = 1 - pt(t0, length(humedad) - 1), t_critico = qt(0.95, length(humedad) - 1)) |>
+  round(4)
+```
+
+Con valor p = `r round(prueba$p.value, 4)` < 0.05 se **rechaza $H_0$**: la humedad
+promedio supera la meta de 11 %. El IC bilateral al 95 % es
+[`r round(t.test(humedad)$conf.int, 2)`] %, por debajo del máximo normativo de 12 %:
+**cumple la norma, pero no la meta interna**.
+
+### El valor p como área
+
+```{r area-p, fig.height = 3}
+gl <- length(humedad) - 1
+tibble(x = seq(-4, 4, length.out = 400), d = dt(x, gl)) |>
+  ggplot(aes(x, d)) + geom_line() +
+  geom_area(data = \(df) filter(df, x >= t0), fill = "red", alpha = 0.4) +
+  geom_vline(xintercept = t0, linetype = 2) +
+  labs(title = sprintf("Valor p = área a la derecha de t0 = %.2f", t0), x = "t", y = "densidad")
+```
+
+## 4. Prueba para una varianza
+
+$H_0: \sigma \ge 2.5$ vs. $H_1: \sigma < 2.5$ (espesor).
+
+```{r prueba-varianza}
+chi0 <- (n - 1) * s^2 / 2.5^2
+c(chi0 = chi0, valor_p = pchisq(chi0, n - 1)) |> round(4)
+```
+
+Se rechaza $H_0$: hay evidencia de que la desviación estándar es menor que 2.5 µm.
+
+## 5. ¿Qué significa "95 % de confianza"? (simulación)
+
+```{r cobertura, fig.height = 5}
+mu_real <- 50; sigma_real <- 2
+ics <- map_dfr(1:50, function(i) {
+  y <- rnorm(25, mu_real, sigma_real)
+  ic <- t.test(y)$conf.int
+  tibble(muestra = i, inf = ic[1], sup = ic[2], contiene = inf <= mu_real & sup >= mu_real)
+})
+ggplot(ics, aes(y = muestra, xmin = inf, xmax = sup, colour = contiene)) +
+  geom_errorbarh(height = 0) + geom_vline(xintercept = mu_real) +
+  scale_colour_manual(values = c(`TRUE` = "grey40", `FALSE` = "red")) +
+  labs(title = sprintf("%d de 50 intervalos contienen a μ", sum(ics$contiene)), x = "μ", y = NULL)
+```
+
+## 6. Error tipo I y tipo II (simulación)
+
+```{r errores}
+simular_rechazo <- function(mu, n = 20, sims = 5000) {
+  mean(replicate(sims, t.test(rnorm(n, mu, 0.42), mu = 11, alternative = "greater")$p.value < 0.05))
+}
+tibble(mu_real = c(11, 11.1, 11.2, 11.3, 11.4)) |>
+  mutate(prob_rechazar = map_dbl(mu_real, simular_rechazo),
+         interpretacion = if_else(mu_real == 11, "α (error tipo I)", "potencia = 1 − β")) |>
+  kable(digits = 3)
+```
+
+- Cuando $H_0$ es cierta ($\mu = 11$), se rechaza alrededor del 5 % de las veces: eso es $\alpha$.
+- Cuanto más lejos está la media real de 11, mayor la **potencia**. Con $\mu = 11.1$ y
+  $n = 20$, la mayoría de las veces **no** se detecta el cambio (error tipo II alto). Se
+  retoma en la Sesión 2.

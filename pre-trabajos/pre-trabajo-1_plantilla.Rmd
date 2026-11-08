@@ -1,0 +1,82 @@
+---
+title: "Pre-trabajo 1 — Repaso descriptivo y distribuciones"
+subtitle: "AS001 Análisis Estadístico"
+author: "NOMBRE APELLIDO"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse)
+library(knitr)
+theme_set(theme_minimal(base_size = 12))
+```
+
+```{r datos}
+pernos <- read_csv("datos/diametro-pernos.csv")
+LIE <- 9.85; LSE <- 10.15
+kable(head(pernos))
+```
+
+> Si al compilar ves la tabla anterior, tu instalación funciona. Completa cada bloque y
+> escribe tu interpretación debajo.
+
+# Cuestionario
+
+**1.** *Respuesta:*
+
+**2.** *Respuesta:*
+
+**3.** *Respuesta (incluye el cálculo):*
+
+```{r cuestionario-3}
+# pnorm(...)
+```
+
+**4.** *Respuesta:*
+
+**5.** *Respuesta:*
+
+# Ejercicio en R
+
+## a) Resumen por turno
+
+```{r a}
+
+```
+
+## b) Gráficos
+
+```{r b}
+
+```
+
+## c) Puntaje z y regla empírica
+
+```{r c}
+
+```
+
+*Interpretación:*
+
+## d) Normalidad
+
+```{r d}
+
+```
+
+*Interpretación:*
+
+## e) Proporción fuera de especificación
+
+```{r e}
+
+```
+
+## f) Conclusión para el jefe de planta
+
+*Respuesta:*

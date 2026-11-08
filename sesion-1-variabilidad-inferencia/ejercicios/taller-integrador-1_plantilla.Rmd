@@ -1,0 +1,95 @@
+---
+title: "Taller integrador 1 — Peso de tabletas"
+subtitle: "AS001 Análisis Estadístico · Sesión 1"
+author: "NOMBRE APELLIDO"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse)
+library(knitr)
+library(nortest)
+theme_set(theme_minimal(base_size = 12))
+```
+
+```{r datos}
+tabletas <- read_csv("../datos/peso-tabletas.csv")
+LIE <- 242.5; LSE <- 257.5; nominal <- 250
+glimpse(tabletas)
+```
+
+> Instrucciones: completa cada bloque de código y escribe tu interpretación debajo. Toda
+> cifra que menciones en el texto debe aparecer en una salida de R de este documento.
+
+# Problema 1 — Descripción y atípicos
+
+## a) Resumen por tableteadora
+
+```{r p1a}
+# tabletas |> group_by(tableteadora) |> summarise(...)
+```
+
+## b) Gráfico comparativo
+
+```{r p1b}
+
+```
+
+## c) Atípicos y especificación
+
+```{r p1c}
+
+```
+
+*Interpretación:*
+
+# Problema 2 — Normalidad
+
+## a) Q-Q y Shapiro-Wilk por tableteadora
+
+```{r p2a}
+
+```
+
+*Interpretación:*
+
+## b) Proporción fuera de especificación (T2)
+
+```{r p2b}
+
+```
+
+*¿Es confiable?:*
+
+# Problema 3 — Inferencia (T1)
+
+## a) IC del 95 % para la media
+
+```{r p3a}
+
+```
+
+*Interpretación:*
+
+## b) Prueba de hipótesis
+
+$H_0$: … $\qquad H_1$: … $\qquad \alpha = 0.05$
+
+```{r p3b}
+
+```
+
+*Decisión y conclusión:*
+
+## c) Error tipo II
+
+*Respuesta:*
+
+# Conclusión para el jefe de producción
+
+*Respuesta (3–4 líneas):*

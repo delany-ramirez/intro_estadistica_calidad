@@ -1,0 +1,83 @@
+---
+title: "Solución · Pre-trabajo 2 — Pruebas para dos muestras y primera regresión"
+subtitle: "Uso exclusivo del docente"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse); library(knitr)
+theme_set(theme_minimal(base_size = 12))
+pintura <- read_csv("../../pre-trabajos/datos/viscosidad-pintura.csv")
+```
+
+# Cuestionario (respuestas esperadas)
+
+1. (i) $t$ **pareada** (mismas bolsas); (ii) $t$ de dos muestras, Welch; (iii) prueba $F$
+   unilateral (o Levene si hay dudas de normalidad).
+2. Welch no supone varianzas iguales; si lo son, pierde muy poca potencia; si no lo son,
+   evita valores p engañosos, sobre todo con $n$ desiguales.
+3. Con $n = 6$ la potencia es baja; "no significativo" no prueba igualdad. Habría que
+   revisar el IC de la diferencia y calcular la potencia para la diferencia relevante.
+4. Ejemplo libre: humedad ambiente y defectos de pintura se correlacionan, pero ambos
+   pueden depender de la temporada (variable oculta). Solo un experimento establece causa.
+5. El 86 % de la variación de la respuesta se asocia con la variable del modelo; el 14 %
+   restante es variación no explicada.
+
+# Ejercicio en R
+
+## a) Comparación de lotes
+
+```{r a}
+pintura |> group_by(lote) |>
+  summarise(n = n(), media = mean(viscosidad_cp), s = sd(viscosidad_cp)) |> kable(digits = 1)
+prueba <- t.test(viscosidad_cp ~ lote, data = pintura)
+prueba
+```
+
+Con p = `r round(prueba$p.value, 3)` > 0.05, **no** se detecta diferencia entre lotes.
+
+## b) Dispersión por lote
+
+```{r b}
+ggplot(pintura, aes(temperatura_c, viscosidad_cp, colour = lote)) +
+  geom_point(size = 2) + geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Temperatura (°C)", y = "Viscosidad (cP)")
+```
+
+La viscosidad baja fuertemente con la temperatura; **a igual temperatura**, el lote B
+queda sistemáticamente por encima del A.
+
+## c) Correlación y regresión simple
+
+```{r c}
+cor(pintura$temperatura_c, pintura$viscosidad_cp)
+m <- lm(viscosidad_cp ~ temperatura_c, data = pintura)
+summary(m)
+```
+
+$\widehat{\text{visc}} = `r round(coef(m)[1], 1)` `r round(coef(m)[2], 2)`\,\text{temp}$:
+por cada °C adicional la viscosidad media baja `r abs(round(coef(m)[2], 2))` cP;
+$R^2 =$ `r round(summary(m)$r.squared, 3)`.
+
+## d) Predicción a 25 °C
+
+```{r d}
+predict(m, tibble(temperatura_c = 25), interval = "confidence")
+```
+
+## e) Reflexión (respuesta esperada)
+
+La temperatura, no controlada, añade mucha variabilidad **dentro** de cada lote y oculta
+la diferencia entre lotes. Al incluirla en el modelo, la diferencia aparece:
+
+```{r e}
+summary(lm(viscosidad_cp ~ temperatura_c + lote, data = pintura))$coefficients |> kable(digits = 3)
+```
+
+Lo ideal: medir todas las muestras a temperatura controlada, o medir muestras de ambos
+lotes **en parejas a la misma temperatura** (emparejamiento / bloque). Es la motivación
+del bloqueo en ASC22. *(Se valora la idea; no se espera el modelo con `lote`.)*

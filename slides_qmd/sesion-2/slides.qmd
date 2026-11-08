@@ -1,0 +1,273 @@
+---
+title: "Sesión 2 — Inferencia Aplicada, Regresión y Supuestos"
+subtitle: "AS001 Análisis Estadístico · Maestría en Sistemas Integrados de Gestión de la Calidad"
+format:
+  revealjs:
+    theme: [simple, ../custom.scss]
+    embed-resources: true
+    slide-number: true
+    transition: slide
+    highlight-style: github
+    html-math-method: katex
+    width: 1280
+    height: 720
+    margin: 0.05
+    scrollable: true
+    incremental: false
+lang: es
+---
+
+## Agenda del día
+
+| Hora | Bloque |
+|---|---|
+| 8:00 | Retroalimentación del Pre-trabajo 2 |
+| 8:20 | **Parte 1** — Pruebas t y razón de varianzas |
+| 9:15 | **Parte 2** — Potencia y tamaño de muestra |
+| 9:45 | **Parte 3** — Puente al ANOVA |
+| 10:10 | *Receso* |
+| 10:30 | **Parte 4** — Correlación y regresión |
+| 11:50 | **Parte 5** — Supuestos y diagnóstico |
+| 12:40 | *Pausa e instrucciones* |
+| 12:50 | **Evaluación individual (50 %)** |
+| 13:50 | Cierre: qué sigue en ASC22 |
+
+## {background-color="#1a365d" .center}
+
+[Parte 1]{.parte-numero}
+
+[Pruebas t y Razón de Varianzas]{.parte-titulo}
+
+## ¿Qué prueba uso? La respuesta es el diseño
+
+```
+¿Cuántas muestras?
+├─ Una vs. referencia ...................... t de una muestra
+└─ Dos
+   ├─ Mismas unidades medidas dos veces ..... t PAREADA
+   └─ Unidades independientes
+      ├─ Varianzas distintas o dudoso ....... t de Welch (defecto en R)
+      ├─ Varianzas iguales .................. t combinada
+      └─ Comparar dispersión ................ F  (Levene si no hay normalidad)
+```
+
+## Dos muestras independientes {.smaller}
+
+::: {.columns}
+
+::: {.column width="50%" .box-blue}
+### Combinada
+$$t_0 = \frac{\bar{y}_1-\bar{y}_2}{s_p\sqrt{\frac{1}{n_1}+\frac{1}{n_2}}}$$
+$gl = n_1 + n_2 - 2$
+:::
+
+::: {.column width="50%" .box-green}
+### Welch
+$$t_0 = \frac{\bar{y}_1-\bar{y}_2}{\sqrt{\frac{s_1^2}{n_1}+\frac{s_2^2}{n_2}}}$$
+$gl$ de Welch–Satterthwaite (no entero)
+:::
+
+:::
+
+**Caso: dos líneas de ensamble** — B es **más lenta** y **más variable** que A.
+
+$$F_0 = s_A^2 / s_B^2 \sim F_{n_A-1,\,n_B-1}$$
+
+👉 Práctica 01 §1
+
+## Datos pareados: misma data, conclusión opuesta
+
+12 probetas medidas con **dos durómetros**.
+
+| Análisis | Error estándar | Valor p |
+|---|:---:|:---:|
+| **Pareado** (correcto) | 0.14 | 0.0002 |
+| Dos muestras (incorrecto) | 1.89 | 0.69 |
+
+<br>
+
+> El emparejamiento **elimina la variabilidad entre unidades** del error.
+> Es la forma más simple de **bloqueo** (ASC22).
+
+👉 Práctica 01 §2 · **Ejercicio 01**
+
+## {background-color="#1a365d" .center}
+
+[Parte 2]{.parte-numero}
+
+[Potencia y Tamaño de Muestra]{.parte-titulo}
+
+## Los cuatro ingredientes
+
+::: {.columns}
+
+::: {.column width="50%"}
+1. $\alpha$ — riesgo de falsa alarma
+2. $\delta$ — diferencia de **importancia práctica**
+3. $\sigma$ — variabilidad
+4. $n$ ↔ **potencia** $1-\beta$
+
+Fijados tres, sale el cuarto.
+:::
+
+::: {.column width="50%"}
+$$n \approx \frac{2(z_{\alpha/2}+z_\beta)^2\sigma^2}{\delta^2}$$
+
+- Mitad de $\delta$ → **4×** $n$
+- Mitad de $\sigma$ → **¼** de $n$
+:::
+
+:::
+
+```r
+power.t.test(n = 15, delta = 2, sd = 3)          # ¿qué potencia tengo?
+power.t.test(power = 0.90, delta = 2, sd = 3)    # ¿cuántos necesito?
+```
+
+👉 Práctica 02 §1–2 · **Ejercicio 02**
+
+## {background-color="#1a365d" .center}
+
+[Parte 3]{.parte-numero}
+
+[Puente al ANOVA]{.parte-titulo}
+
+## Partir la variabilidad {.smaller}
+
+Con $m$ pruebas $t$: $P(\text{al menos una falsa alarma}) \approx 1-(1-\alpha)^m$ → con 10, ≈ 40 %.
+
+$$
+\underbrace{\sum\sum(y_{ij}-\bar{y}_{\cdot\cdot})^2}_{SC_T}
+= \underbrace{n\sum(\bar{y}_{i\cdot}-\bar{y}_{\cdot\cdot})^2}_{\text{Entre (señal)}}
++ \underbrace{\sum\sum(y_{ij}-\bar{y}_{i\cdot})^2}_{\text{Dentro (ruido)}}
+$$
+
+$$
+F_0 = \frac{SC_{\text{Entre}}/(a-1)}{SC_E/(N-a)} \sim F_{a-1,\,N-a}
+$$
+
+- $F_0 \approx 1$: las medias no se separan más que el ruido
+- Con $a = 2$: $F_0 = t_0^2$
+
+**En ASC22:** modelo $y_{ij} = \mu + \tau_i + \varepsilon_{ij}$, Tukey, bloques, factoriales.
+
+👉 Práctica 02 §3 (rugosidad de 3 proveedores)
+
+## {background-color="#1a365d" .center}
+
+[Parte 4]{.parte-numero}
+
+[Correlación y Regresión]{.parte-titulo}
+
+## Correlación ≠ causalidad
+
+$$r = \frac{\sum(x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum(x_i-\bar{x})^2\sum(y_i-\bar{y})^2}}$$
+
+- Mide asociación **lineal**; siempre graficar
+- Variables ocultas en datos observacionales
+- La causa se establece con **experimentos** (ASC22)
+
+## Regresión lineal {.smaller}
+
+$$y = \beta_0 + \beta_1 x_1 + \dots + \beta_k x_k + \varepsilon$$
+
+| Elemento | Qué dice |
+|---|---|
+| $\hat\beta_j$ | Cambio en la **media** de $y$ por unidad de $x_j$, **con lo demás constante** |
+| $R^2$ | Proporción de la variabilidad explicada |
+| $R^2_{aj}$ | Para comparar modelos con distinto número de variables |
+| $t$ por coeficiente | $H_0: \beta_j = 0$ |
+| $F$ global | $H_0$: ningún $x$ sirve |
+
+**Caso: curado de adhesivo** — temperatura y tiempo significativos; humedad no.
+
+👉 Práctica 03 · **Ejercicio 03** (tostión de café)
+
+## IC para la media vs. intervalo de predicción
+
+| | Responde | Amplitud |
+|---|---|---|
+| **IC** | ¿Promedio de **todas** las piezas a $x_0$? | Menor |
+| **IP** | ¿Dónde caerá **la próxima** pieza? | Mayor |
+
+<br>
+
+```r
+predict(m, nuevo, interval = "confidence")
+predict(m, nuevo, interval = "prediction")
+```
+
+> Si la especificación aplica a **cada** pieza, el que importa es el **IP**.
+> ⚠️ No extrapolar.
+
+## {background-color="#1a365d" .center}
+
+[Parte 5]{.parte-numero}
+
+[Supuestos y Diagnóstico]{.parte-titulo}
+
+## Los cuatro gráficos de `plot(modelo)` {.smaller}
+
+| Gráfico | Bien si… | Problema |
+|---|---|---|
+| Residuales vs. ajustados | Nube sin forma | Curva (no lineal) · **embudo** (varianza) |
+| Q-Q normal | Recta | Colas, puntos aislados |
+| Escala-ubicación | Horizontal | Tendencia → heterocedasticidad |
+| Residuales vs. apalancamiento | Nada fuera de Cook | Punto **influyente** |
+
+| Medida | Referencia |
+|---|---|
+| Residual estudentizado | $|r_i| > 3$ |
+| Apalancamiento $h_{ii}$ | $> 2p/n$ |
+| Distancia de Cook | $> 1$ |
+
+## Caso: consumo de energía
+
+1. Ajuste lineal → **embudo** y un día influyente
+2. Bitácora: error de digitación → se excluye **documentando**
+3. Box-Cox → hay que transformar
+4. Modelo **log-log** → residuales sin patrón
+5. Pendiente = **elasticidad** < 1 → economía de escala
+6. Predicción → `exp()` de los límites
+
+> Ajustar → residuales → corregir → validar → interpretar.
+> Es el mismo flujo de cada ANOVA en ASC22.
+
+👉 Práctica 04 · **Ejercicio 04** (tiempo de entrega)
+
+## {background-color="#1a365d" .center}
+
+[Evaluación individual]{.parte-numero}
+
+[60 min · 50 %]{.parte-titulo}
+
+## Evaluación individual
+
+::: {.box-yellow}
+- Material del curso y cheatsheet permitidos; sin comunicación ni asistentes de IA
+- Cambia `VERSION` en la plantilla a la letra asignada
+- Entrega `.Rmd` + `.html` en la plataforma
+:::
+
+| Pregunta | Tiempo | Puntos |
+|---|:---:|:---:|
+| 1. Descripción | 10 min | 15 |
+| 2. Comparación de máquinas | 15 min | 30 |
+| 3. Modelo de regresión | 20 min | 35 |
+| 4. Validación | 10 min | 15 |
+| Reproducibilidad | — | 5 |
+
+## Qué te llevas a ASC22 {.center .smaller}
+
+| De este curso | En Diseño y Desarrollo de Experimentos |
+|---|---|
+| Réplica, aleatorización, estratificación | Principios del diseño; bloques |
+| Pareada | Diseño en bloques completos al azar |
+| Potencia y tamaño de muestra | ¿Cuántas réplicas? |
+| Partición de la variabilidad y $F$ | ANOVA de uno y varios factores |
+| Regresión múltiple | Modelos de efectos y superficies de respuesta |
+| Residuales e influencia | Validación de **cada** modelo |
+
+<br>
+
+**¡Gracias!**

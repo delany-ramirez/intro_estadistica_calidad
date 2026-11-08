@@ -1,0 +1,94 @@
+---
+title: "Solución · Ejercicio 01 — Variabilidad y descriptiva comparativa"
+subtitle: "Sesión 1"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse); library(knitr)
+theme_set(theme_minimal(base_size = 12))
+hilo <- read_csv("../datos/resistencia-hilo.csv")
+```
+
+## a) Datos
+
+- **Unidad experimental:** el **cono** de hilo (cada uno es una realización independiente
+  del proceso del proveedor).
+- **Unidad de medición:** la **probeta** cortada del cono. Aquí coinciden (una probeta por cono).
+- Con 5 probetas de 5 conos habría solo **5 réplicas** por proveedor (5 conos) y 5
+  **repeticiones** por cono. Tratar las 25 lecturas como independientes **subestimaría**
+  la variabilidad entre conos, que es la que importa al comprar.
+
+## b) Resumen por grupo
+
+```{r resumen}
+resumen <- hilo |>
+  group_by(proveedor) |>
+  summarise(n = n(), media = mean(resistencia_cn), mediana = median(resistencia_cn),
+            s = sd(resistencia_cn), RIC = IQR(resistencia_cn), CV_pct = 100 * s / media,
+            min = min(resistencia_cn), max = max(resistencia_cn))
+kable(resumen, digits = 1)
+```
+
+**Alfa** es el más consistente: tiene el menor RIC y la menor $s$, aunque su $s$ está
+inflada por un único cono muy débil (ver d). **Beta es claramente el más variable**: su
+RIC es unas tres veces el de Alfa y su CV es el mayor.
+
+## c) Gráficos
+
+```{r graficos, fig.height = 4}
+ggplot(hilo, aes(proveedor, resistencia_cn, fill = proveedor)) +
+  geom_boxplot(width = 0.5, show.legend = FALSE) +
+  geom_hline(yintercept = 380, linetype = 2, colour = "red") +
+  labs(title = "Diagrama de cajas", x = NULL, y = "Resistencia (cN)")
+
+ggplot(hilo, aes(proveedor, resistencia_cn, fill = proveedor)) +
+  geom_violin(alpha = 0.6, show.legend = FALSE) +
+  geom_jitter(width = 0.08, size = 1.2, show.legend = FALSE) +
+  geom_hline(yintercept = 380, linetype = 2, colour = "red") +
+  labs(title = "Violín + datos individuales", x = NULL, y = "Resistencia (cN)")
+```
+
+- Las **cajas** resumen mediana, RIC y señalan atípicos de forma estandarizada.
+- El **violín con puntos** muestra la forma de la distribución y cada dato; con $n = 25$
+  permite ver que el atípico de Alfa está aislado y que Beta es ancho en todo su rango.
+
+## d) Atípicos
+
+```{r atipicos}
+hilo |>
+  group_by(proveedor) |>
+  mutate(z = (resistencia_cn - mean(resistencia_cn)) / sd(resistencia_cn),
+         lim_inf = quantile(resistencia_cn, .25) - 1.5 * IQR(resistencia_cn),
+         lim_sup = quantile(resistencia_cn, .75) + 1.5 * IQR(resistencia_cn),
+         tukey = resistencia_cn < lim_inf | resistencia_cn > lim_sup,
+         z3 = abs(z) > 3) |>
+  filter(tukey | z3) |>
+  select(proveedor, resistencia_cn, z, lim_inf, lim_sup, tukey, z3) |>
+  kable(digits = 2)
+```
+
+Los dos criterios pueden no coincidir: el atípico inflá $s$ y eso **reduce su propio $z$**
+(efecto de enmascaramiento); la regla de Tukey, basada en cuartiles, es más robusta.
+Antes de eliminar: revisar el registro (¿error de digitación?), el cono (¿defecto
+visible?, ¿lote distinto?) y el ensayo (¿mordaza, velocidad?). Solo se excluye con una
+causa documentada.
+
+## e) Especificación
+
+```{r espec}
+hilo |> filter(resistencia_cn < 380) |> kable()
+```
+
+## f) Recomendación
+
+Las medias de Alfa y Beta son parecidas, pero **Beta tiene casi el doble de dispersión**:
+producirá más conos cerca del mínimo. **Gama** tiene la mayor resistencia central y baja
+dispersión (su atípico es por exceso, no compromete la especificación). Recomendación:
+preferir **Gama**, mantener **Alfa** como alternativa e investigar el cono atípico, y
+pedir a **Beta** un plan de reducción de variabilidad. Comparar solo medias habría
+ocultado el problema de Beta.

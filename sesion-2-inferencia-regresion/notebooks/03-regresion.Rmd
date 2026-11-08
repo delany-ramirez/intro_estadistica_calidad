@@ -1,0 +1,147 @@
+---
+title: "03 · Correlación y regresión lineal"
+subtitle: "Sesión 2 — Inferencia aplicada, regresión y supuestos"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Explorar relaciones con diagramas de dispersión y la matriz de correlación.
+- Ajustar e interpretar una regresión simple y una múltiple con `lm()`.
+- Usar la ecuación de predicción con su IC para la media y su intervalo de predicción.
+
+**Paquetes:** `tidyverse`, `knitr`, `broom`, `car`.
+
+> Teoría: [`../teoria/04-correlacion-regresion.md`](../teoria/04-correlacion-regresion.md).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(broom)
+library(car)
+theme_set(theme_minimal(base_size = 12))
+```
+
+## 1. Los datos
+
+Un fabricante de adhesivos estructurales registró la **resistencia al corte (MPa)** de
+30 probetas curadas a distintas **temperaturas** (°C), **tiempos** (min) y con distinta
+**humedad relativa** (%) del ambiente.
+
+```{r datos}
+curado <- read_csv("../datos/curado-adhesivo.csv")
+summary(curado[-1])
+```
+
+## 2. Exploración y correlación
+
+```{r dispersion, fig.height = 3.5}
+curado |>
+  pivot_longer(c(temperatura_c, tiempo_min, humedad_pct), names_to = "variable", values_to = "x") |>
+  ggplot(aes(x, resistencia_mpa)) +
+  geom_point() + geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ variable, scales = "free_x") +
+  labs(x = NULL, y = "Resistencia (MPa)")
+```
+
+```{r correlacion}
+cor(curado[-1]) |> kable(digits = 2)
+cor.test(curado$temperatura_c, curado$resistencia_mpa)
+```
+
+## 3. Regresión simple: resistencia vs. temperatura
+
+```{r simple}
+m1 <- lm(resistencia_mpa ~ temperatura_c, data = curado)
+summary(m1)
+```
+
+Ecuación ajustada:
+
+$$\hat{y} = `r round(coef(m1)[1], 3)` + `r round(coef(m1)[2], 4)`\,x_{\text{temp}}$$
+
+- Por cada °C adicional, la resistencia media aumenta
+  `r round(coef(m1)[2], 4)` MPa (IC 95 %: `r round(confint(m1)[2, ], 4)`).
+- $R^2 =$ `r round(summary(m1)$r.squared, 3)`: la temperatura sola explica ese porcentaje
+  de la variabilidad. En simple, $R^2 = r^2$ = `r round(cor(curado$temperatura_c, curado$resistencia_mpa)^2, 3)`.
+
+```{r anova-simple}
+anova(m1)
+```
+
+## 4. Regresión múltiple
+
+```{r multiple}
+m2 <- lm(resistencia_mpa ~ temperatura_c + tiempo_min + humedad_pct, data = curado)
+summary(m2)
+tidy(m2, conf.int = TRUE) |> kable(digits = 4)
+```
+
+```{r comparar}
+bind_rows(glance(m1) |> mutate(modelo = "Simple (temp)"),
+          glance(m2) |> mutate(modelo = "Múltiple (temp + tiempo + humedad)")) |>
+  select(modelo, r.squared, adj.r.squared, sigma, p.value) |>
+  kable(digits = 4)
+vif(m2)
+```
+
+- Temperatura y tiempo son significativos; la **humedad no** lo es en este rango.
+- $\hat\sigma$ baja al agregar el tiempo: las predicciones serán más precisas.
+- VIF ≈ 1: no hay multicolinealidad.
+
+### Modelo reducido
+
+```{r reducido}
+m3 <- lm(resistencia_mpa ~ temperatura_c + tiempo_min, data = curado)
+summary(m3)$coefficients |> kable(digits = 4)
+anova(m3, m2)   # ¿aporta algo la humedad?
+```
+
+## 5. Predicción: IC vs. IP
+
+Condición de operación propuesta: **85 °C** durante **30 min**.
+
+```{r prediccion}
+nuevo <- tibble(temperatura_c = 85, tiempo_min = 30)
+bind_rows(
+  as_tibble(predict(m3, nuevo, interval = "confidence")) |> mutate(tipo = "IC para la media"),
+  as_tibble(predict(m3, nuevo, interval = "prediction")) |> mutate(tipo = "IP para una probeta")
+) |> relocate(tipo) |> kable(digits = 3)
+```
+
+- El **IC** dice dónde está la resistencia **promedio** de todas las probetas curadas así.
+- El **IP** dice dónde caerá **una** probeta nueva; es el que importa si la especificación
+  aplica a cada unión.
+
+```{r bandas}
+grid <- tibble(temperatura_c = seq(60, 100, 1), tiempo_min = 30)
+bandas <- bind_cols(grid,
+  as_tibble(predict(m3, grid, interval = "confidence")) |> rename(ic_inf = lwr, ic_sup = upr),
+  as_tibble(predict(m3, grid, interval = "prediction")) |> select(ip_inf = lwr, ip_sup = upr))
+ggplot(bandas, aes(temperatura_c, fit)) +
+  geom_ribbon(aes(ymin = ip_inf, ymax = ip_sup), fill = "orange", alpha = 0.25) +
+  geom_ribbon(aes(ymin = ic_inf, ymax = ic_sup), fill = "steelblue", alpha = 0.4) +
+  geom_line() +
+  labs(title = "Tiempo = 30 min: IC (azul) e IP (naranja) al 95 %",
+       x = "Temperatura (°C)", y = "Resistencia (MPa)")
+```
+
+> No extrapoles fuera de 60–100 °C ni de 10–40 min.
+
+## 6. Conclusiones
+
+- Modelo final: resistencia ≈ `r round(coef(m3)[1], 2)` +
+  `r round(coef(m3)[2], 4)`·temperatura + `r round(coef(m3)[3], 4)`·tiempo
+  ($R^2_{aj}$ = `r round(summary(m3)$adj.r.squared, 3)`).
+- Antes de usarlo hay que **validar los supuestos** (práctica 04).
+- Estos datos son observacionales: para afirmar causalidad y encontrar el óptimo, el
+  camino es un **experimento diseñado** (ASC22).

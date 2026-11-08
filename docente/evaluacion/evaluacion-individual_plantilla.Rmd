@@ -1,0 +1,106 @@
+---
+title: "Evaluación individual — Inyección de piezas plásticas"
+subtitle: "AS001 Análisis Estadístico · Sesión 2"
+author: "NOMBRE APELLIDO"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse)
+library(knitr)
+library(car)
+library(broom)
+theme_set(theme_minimal(base_size = 12))
+```
+
+```{r datos}
+# Cambia la letra según la versión asignada por el docente
+VERSION <- "A"
+iny <- read_csv(paste0("datos/inyeccion-version-", VERSION, ".csv"))
+glimpse(iny)
+```
+
+# Pregunta 1 — Descripción
+
+## a)
+
+```{r p1a}
+
+```
+
+## b)
+
+*Respuesta:*
+
+# Pregunta 2 — Comparación de máquinas
+
+## a) Supuestos y elección de la prueba
+
+```{r p2a}
+
+```
+
+*Justificación:*
+
+## b) Prueba
+
+$H_0$: … $\qquad H_1$: …
+
+```{r p2b}
+
+```
+
+*Decisión y conclusión:*
+
+## c) Varianzas
+
+```{r p2c}
+
+```
+
+*Conclusión:*
+
+# Pregunta 3 — Modelo de regresión
+
+## a) Modelo
+
+```{r p3a}
+
+```
+
+*Ecuación:*
+
+## b) Interpretación
+
+*Respuesta:*
+
+## c) Comparación con la Pregunta 2
+
+*Respuesta:*
+
+## d) Predicción
+
+```{r p3d}
+
+```
+
+*Respuesta:*
+
+# Pregunta 4 — Validación
+
+## a) Diagnóstico
+
+```{r p4a}
+
+```
+
+*Respuesta:*
+
+## b) Recomendación
+
+*Respuesta:*

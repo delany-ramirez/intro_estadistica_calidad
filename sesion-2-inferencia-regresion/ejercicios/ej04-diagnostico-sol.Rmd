@@ -1,0 +1,91 @@
+---
+title: "Solución · Ejercicio 04 — Diagnóstico de residuales e influencia"
+subtitle: "Sesión 2"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 8, fig.height = 6)
+library(tidyverse); library(knitr); library(broom); library(car)
+theme_set(theme_minimal(base_size = 12))
+tost <- read_csv("../datos/tostion-cafe.csv")
+entrega <- read_csv("../datos/tiempo-entrega.csv")
+```
+
+## Parte A — Tostión de café
+
+```{r a}
+m_tost <- lm(perdida_peso_pct ~ tiempo_min + temperatura_c, data = tost)
+par(mfrow = c(2, 2)); plot(m_tost); par(mfrow = c(1, 1))
+c(shapiro_p = shapiro.test(residuals(m_tost))$p.value, ncv_p = ncvTest(m_tost)$p,
+  max_cook = max(cooks.distance(m_tost))) |> round(3)
+```
+
+Sin patrones, Q-Q aceptable, sin puntos influyentes y las pruebas no rechazan: el modelo
+es **válido** y las conclusiones del ejercicio 03 se sostienen.
+
+## Parte B — Tiempo de entrega
+
+### b) Modelo
+
+```{r b}
+m <- lm(tiempo_min ~ cajas + distancia_m, data = entrega)
+summary(m)
+```
+
+### c) Diagnóstico
+
+```{r c}
+par(mfrow = c(2, 2)); plot(m); par(mfrow = c(1, 1))
+shapiro.test(residuals(m))
+```
+
+La **entrega 9** aparece aislada en el Q-Q (cola superior), con el mayor residual en el
+gráfico vs. ajustados y fuera de la curva de Cook = 1 en el de apalancamiento. Shapiro
+rechaza la normalidad por causa de ese punto.
+
+### d) Medidas de influencia
+
+```{r d}
+n <- nrow(entrega); p <- length(coef(m))
+augment(m) |>
+  mutate(entrega = entrega$entrega, r_stud = rstudent(m)) |>
+  select(entrega, cajas, distancia_m, tiempo_min, .hat, r_stud, .cooksd) |>
+  arrange(desc(.cooksd)) |> head(4) |>
+  kable(digits = 3, caption = sprintf("Referencias: h > %.2f, |r| > 3, Cook > 1", 2 * p / n))
+```
+
+La entrega 9 tiene **alto apalancamiento** (máximo de cajas y distancia), **residual
+estudentizado muy grande** y **Cook > 1**: es atípica **e** influyente.
+
+### e) Sin la entrega 9
+
+```{r e}
+m9 <- lm(tiempo_min ~ cajas + distancia_m, data = filter(entrega, entrega != 9))
+bind_rows(tidy(m) |> mutate(modelo = "Completo"),
+          tidy(m9) |> mutate(modelo = "Sin entrega 9")) |>
+  select(modelo, term, estimate, std.error, p.value) |> kable(digits = 4)
+bind_rows(glance(m) |> mutate(modelo = "Completo"),
+          glance(m9) |> mutate(modelo = "Sin entrega 9")) |>
+  select(modelo, r.squared, sigma) |> kable(digits = 3)
+shapiro.test(residuals(m9))$p.value
+```
+
+Sin el punto, el efecto de la distancia baja de `r round(coef(m)[3] * 100, 2)` a
+`r round(coef(m9)[3] * 100, 2)` min por cada 100 m (≈ `r round(100 * (1 - coef(m9)[3] / coef(m)[3]))` %
+menos), $\hat\sigma$ se reduce y los residuales pasan a ser compatibles con la normalidad.
+**Un solo punto** estaba exagerando el efecto de la distancia.
+
+### f) Qué hacer y cómo reportarlo
+
+Antes de excluirlo: revisar la planilla de la entrega 9 (¿se registró bien el tiempo?, ¿hubo
+una espera, un acceso difícil, un problema con el cliente?). Si hay causa especial
+documentada, se excluye; si no, se reportan **ambos** modelos.
+
+> *Reporte:* "El tiempo de entrega aumenta ≈ `r round(coef(m9)[2], 2)` min por caja y
+> ≈ `r round(coef(m9)[3] * 100, 2)` min por cada 100 m caminados. Una entrega
+> (n.º 9, 30 cajas a 1450 m) tardó 14 min más de lo esperado por causas en revisión; se
+> excluyó del modelo porque distorsionaba el efecto de la distancia."

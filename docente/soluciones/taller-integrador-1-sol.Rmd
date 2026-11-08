@@ -1,0 +1,125 @@
+---
+title: "Solución · Taller integrador 1 — Peso de tabletas"
+subtitle: "Uso exclusivo del docente"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse); library(knitr); library(nortest)
+theme_set(theme_minimal(base_size = 12))
+tabletas <- read_csv("../../sesion-1-variabilidad-inferencia/datos/peso-tabletas.csv")
+LIE <- 242.5; LSE <- 257.5; nominal <- 250
+```
+
+# Problema 1 — Descripción y atípicos
+
+## a) Resumen
+
+```{r p1a}
+resumen <- tabletas |> group_by(tableteadora) |>
+  summarise(n = n(), media = mean(peso_mg), mediana = median(peso_mg), s = sd(peso_mg),
+            RIC = IQR(peso_mg), min = min(peso_mg), max = max(peso_mg))
+kable(resumen, digits = 2)
+```
+
+## b) Gráfico
+
+```{r p1b}
+ggplot(tabletas, aes(tableteadora, peso_mg, fill = tableteadora)) +
+  geom_violin(alpha = 0.5, show.legend = FALSE) +
+  geom_jitter(width = 0.08, size = 1.2, show.legend = FALSE) +
+  geom_hline(yintercept = c(LIE, nominal, LSE), linetype = c(2, 1, 2), colour = c("red", "black", "red")) +
+  labs(x = NULL, y = "Peso (mg)")
+```
+
+## c) Atípicos y especificación
+
+```{r p1c}
+tabletas |> group_by(tableteadora) |>
+  mutate(li = quantile(peso_mg, .25) - 1.5 * IQR(peso_mg),
+         ls = quantile(peso_mg, .75) + 1.5 * IQR(peso_mg)) |>
+  filter(peso_mg < li | peso_mg > ls | peso_mg < LIE | peso_mg > LSE) |>
+  mutate(atipico_tukey = peso_mg < li | peso_mg > ls,
+         fuera_espec = peso_mg < LIE | peso_mg > LSE) |>
+  select(tableteadora, lote, peso_mg, atipico_tukey, fuera_espec) |> kable(digits = 1)
+```
+
+**Esperado:** identificar las dos tabletas atípicas (una en T1 por debajo, otra en T2 por
+encima), ambas fuera de especificación; **no** borrarlas sin investigar (registro,
+calibración de balanza, punzón dañado). Para la inferencia, analizar con y sin ellas o
+excluirlas documentando la causa.
+
+# Problema 2 — Normalidad
+
+## a) Q-Q y Shapiro-Wilk
+
+```{r p2a}
+ggplot(tabletas, aes(sample = peso_mg, colour = tableteadora)) + geom_qq() + geom_qq_line() +
+  labs(x = "Cuantil teórico", y = "Peso (mg)")
+tabletas |> group_by(tableteadora) |>
+  summarise(shapiro_p = shapiro.test(peso_mg)$p.value,
+            shapiro_p_sin_atipico = shapiro.test(peso_mg[peso_mg > LIE & peso_mg < LSE])$p.value) |>
+  kable(digits = 4)
+```
+
+**Esperado:** el atípico aparece como punto aislado en el Q-Q; sin él, la normalidad es
+razonable. Se valora que el estudiante relacione el rechazo con el atípico.
+
+## b) Proporción fuera de especificación (T2)
+
+```{r p2b}
+t2 <- filter(tabletas, tableteadora == "T2")$peso_mg
+p_t2 <- pnorm(LIE, mean(t2), sd(t2)) + 1 - pnorm(LSE, mean(t2), sd(t2))
+c(modelo_normal = p_t2, observada = mean(t2 < LIE | t2 > LSE)) |> round(4)
+```
+
+**Esperado:** con $n = 40$ la estimación de una cola es imprecisa y depende del supuesto de
+normalidad en las colas; además el atípico infla $s$. Es una estimación orientativa.
+
+# Problema 3 — Inferencia (T1)
+
+## a) IC del 95 %
+
+```{r p3a}
+t1 <- filter(tabletas, tableteadora == "T1")$peso_mg
+t.test(t1)$conf.int
+t.test(t1[t1 > LIE])$conf.int   # sin el atípico
+```
+
+## b) Prueba
+
+$H_0: \mu_{T1} = 250$ vs. $H_1: \mu_{T1} \ne 250$, $\alpha = 0.05$.
+
+```{r p3b}
+p_t1 <- t.test(t1, mu = 250)
+p_t1
+```
+
+**Esperado:** con o sin el atípico, reportar $t_0$, gl = 39 (o 38), valor p y decisión
+coherente con el IC.
+
+## c) Error tipo II
+
+No detectar que el peso medio de T1 se ha desplazado del nominal cuando sí lo ha hecho
+→ se liberan tabletas con dosis sistemáticamente distinta a la declarada (riesgo para el
+paciente: subdosificación o sobredosificación).
+
+# Conclusión esperada
+
+**T2 preocupa más**: su media está más lejos del nominal **y** su dispersión es mayor, de
+modo que produce más tabletas cerca de los límites. Acción: centrar T2 y revisar las causas
+de su mayor variabilidad (alimentación del polvo, punzones); investigar los dos atípicos.
+
+# Rúbrica detallada
+
+| Criterio | Excelente | Aceptable | Insuficiente |
+|---|---|---|---|
+| P1 (30) | Resumen completo, gráfico con forma + datos + límites, atípicos identificados y tratados con criterio (27–30) | Falta un elemento o atípicos borrados sin justificar (18–26) | Resumen incompleto, sin gráfico comparativo (0–17) |
+| P2 (25) | Q-Q + prueba por grupo, relaciona rechazo con atípico, discute alcance de la estimación de colas (23–25) | Pruebas correctas, interpretación superficial (15–22) | Prueba sobre todos los datos juntos o sin interpretación (0–14) |
+| P3 (30) | IC e interpretación correctos, prueba completa (H0/H1, estadístico, gl, p, decisión), error tipo II en contexto (27–30) | Un componente faltante (18–26) | Interpretación incorrecta del IC o del valor p (0–17) |
+| Conclusión (10) | Centro **y** variabilidad, acción concreta (9–10) | Solo uno de los dos (5–8) | Sin conclusión de proceso (0–4) |
+| Reproducible (5) | Compila; cifras de R (5) | Compila con advertencias (3) | No compila (0) |

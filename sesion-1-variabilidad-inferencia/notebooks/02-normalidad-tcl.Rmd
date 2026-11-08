@@ -1,0 +1,147 @@
+---
+title: "02 · Normalidad y Teorema Central del Límite"
+subtitle: "Sesión 1 — Variabilidad, normalidad e inferencia"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Verificar el supuesto de normalidad con el **gráfico de probabilidad normal** y con las
+  pruebas de **Shapiro-Wilk** y **Anderson-Darling**.
+- Ver cómo una mezcla y una distribución asimétrica se delatan en el Q-Q.
+- Comprobar por **simulación** qué asegura y qué no asegura el TCL.
+
+**Paquetes:** `tidyverse`, `knitr`, `nortest`, `patchwork`.
+
+> Teoría: [`../teoria/03-normalidad-tcl.md`](../teoria/03-normalidad-tcl.md).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(nortest)
+library(patchwork)
+theme_set(theme_minimal(base_size = 12))
+set.seed(2026)
+```
+
+## 1. Normalidad en el caso de las boquillas
+
+```{r datos-llenado}
+llenado <- read_csv("../datos/llenado-envases.csv")
+```
+
+```{r qq-llenado, fig.height = 4}
+q_todos <- ggplot(llenado, aes(sample = volumen_ml)) +
+  geom_qq() + geom_qq_line(colour = "red") +
+  labs(title = "Todos los envases", x = "Cuantil teórico N(0,1)", y = "Volumen (mL)")
+q_boq <- ggplot(llenado, aes(sample = volumen_ml, colour = boquilla)) +
+  geom_qq() + geom_qq_line() +
+  labs(title = "Por boquilla", x = "Cuantil teórico N(0,1)", y = NULL)
+q_todos + q_boq
+```
+
+El Q-Q global muestra un **escalón** en el centro (mezcla); por boquilla los puntos se
+alinean.
+
+```{r pruebas-llenado}
+pruebas <- function(y) c(SW_p = shapiro.test(y)$p.value, AD_p = ad.test(y)$p.value)
+bind_rows(
+  tibble(grupo = "Todos", !!!pruebas(llenado$volumen_ml)),
+  llenado |> group_by(grupo = boquilla) |> summarise(as_tibble_row(pruebas(volumen_ml)))
+) |> kable(digits = 4, caption = "Valores p de las pruebas de normalidad")
+```
+
+Con todos los datos se **rechaza** la normalidad; dentro de cada boquilla, no.
+
+## 2. Una variable asimétrica: tiempo de atención
+
+```{r datos-atencion}
+atencion <- read_csv("../datos/tiempo-atencion.csv")
+atencion |>
+  group_by(canal) |>
+  summarise(n = n(), media = mean(tiempo_min), mediana = median(tiempo_min),
+            s = sd(tiempo_min)) |>
+  kable(digits = 2)
+```
+
+```{r graf-atencion}
+h <- ggplot(atencion, aes(tiempo_min)) +
+  geom_histogram(binwidth = 1.5, fill = "darkorange", colour = "white") +
+  labs(title = "Tiempo de atención", x = "min", y = "Frecuencia")
+q <- ggplot(atencion, aes(sample = tiempo_min)) + geom_qq() + geom_qq_line(colour = "red") +
+  labs(title = "Q-Q normal", x = "Cuantil teórico", y = "min")
+h + q
+shapiro.test(atencion$tiempo_min)
+```
+
+El Q-Q tiene forma de **J** (asimetría a la derecha): los tiempos **no** son normales.
+La media supera a la mediana.
+
+### Consecuencia práctica
+
+¿Qué fracción de clientes espera más de 20 minutos?
+
+```{r prob-cola}
+p_obs <- mean(atencion$tiempo_min > 20)
+p_normal <- 1 - pnorm(20, mean(atencion$tiempo_min), sd(atencion$tiempo_min))
+c(observada = p_obs, modelo_normal = p_normal) |> round(4)
+```
+
+Un modelo normal **no** reproduce bien la cola de esta distribución asimétrica: para
+preguntas sobre datos individuales hay que usar un modelo adecuado (gamma, lognormal) o los
+datos mismos.
+
+## 3. El TCL por simulación
+
+Tomamos la muestra de tiempos de atención como si fuera la **población** y extraemos
+muchas muestras de tamaño $n$; para cada una calculamos la media.
+
+```{r tcl-sim, fig.height = 6}
+poblacion <- atencion$tiempo_min
+medias <- map_dfr(c(2, 5, 15, 40), function(n) {
+  tibble(n = n, media = replicate(3000, mean(sample(poblacion, n, replace = TRUE))))
+})
+ggplot(medias, aes(media)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40, fill = "steelblue", colour = "white") +
+  facet_wrap(~ n, scales = "free", labeller = label_both) +
+  labs(title = "Distribución de la media muestral", x = "Media de la muestra (min)", y = "Densidad")
+```
+
+```{r tcl-tabla}
+medias |>
+  group_by(n) |>
+  summarise(media_de_medias = mean(media), sd_de_medias = sd(media),
+            sigma_sobre_raiz_n = sd(poblacion) / sqrt(first(n)),
+            shapiro_p = shapiro.test(sample(media, 500))$p.value) |>
+  kable(digits = 3)
+```
+
+- La media de las medias ≈ media poblacional (`r round(mean(poblacion), 2)` min).
+- Su desviación ≈ $\sigma/\sqrt{n}$: el **error estándar** baja al crecer $n$.
+- La forma se acerca a la normal al crecer $n$ (con $n = 2$ todavía es asimétrica).
+
+### Lo que el TCL no hace
+
+```{r tcl-no}
+muestra40 <- sample(poblacion, 40)
+shapiro.test(muestra40)$p.value
+```
+
+Una muestra de 40 tiempos **individuales** sigue siendo asimétrica: el TCL habla de la
+**media**, no de los datos.
+
+## 4. Conclusiones
+
+- El gráfico Q-Q es la primera herramienta; las pruebas formales lo complementan.
+- Un **escalón** en el Q-Q delata una mezcla; una **J**, asimetría.
+- El TCL respalda la inferencia sobre la **media** con muestras moderadas, pero no
+  autoriza a usar la normal para la fracción de casos en la cola.

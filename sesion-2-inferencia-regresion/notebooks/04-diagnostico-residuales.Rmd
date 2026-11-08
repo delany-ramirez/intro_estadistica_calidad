@@ -1,0 +1,152 @@
+---
+title: "04 · Supuestos y diagnóstico del modelo"
+subtitle: "Sesión 2 — Inferencia aplicada, regresión y supuestos"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Leer los cuatro gráficos de diagnóstico de un modelo lineal.
+- Detectar heterocedasticidad, atípicos y puntos influyentes.
+- Corregir con una transformación y volver a validar.
+
+**Paquetes:** `tidyverse`, `knitr`, `broom`, `car`, `MASS`.
+
+> Teoría: [`../teoria/05-supuestos-diagnostico.md`](../teoria/05-supuestos-diagnostico.md).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 8, fig.height = 6)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(broom)
+library(car)
+theme_set(theme_minimal(base_size = 12))
+```
+
+## 1. Un modelo que cumple: curado de adhesivo
+
+```{r m-curado}
+curado <- read_csv("../datos/curado-adhesivo.csv")
+m_ok <- lm(resistencia_mpa ~ temperatura_c + tiempo_min, data = curado)
+par(mfrow = c(2, 2)); plot(m_ok); par(mfrow = c(1, 1))
+```
+
+```{r pruebas-ok}
+tibble(prueba = c("Shapiro-Wilk (normalidad)", "ncvTest (varianza constante)",
+                  "Durbin-Watson (independencia)"),
+       valor_p = c(shapiro.test(residuals(m_ok))$p.value,
+                   ncvTest(m_ok)$p,
+                   durbinWatsonTest(m_ok)$p)) |>
+  kable(digits = 3)
+```
+
+Nube sin patrón, Q-Q recto, sin puntos con distancia de Cook alta: el modelo de la
+práctica 03 es **válido**.
+
+## 2. Un modelo con problemas: consumo de energía
+
+Una planta registró durante 40 días la **producción (t)** y el **consumo de energía (kWh)**.
+
+```{r datos-energia, fig.height = 4}
+energia <- read_csv("../datos/consumo-energia.csv")
+ggplot(energia, aes(produccion_t, consumo_kwh)) +
+  geom_point() + geom_smooth(method = "lm", se = FALSE) +
+  geom_text(data = filter(energia, dia == 40), aes(label = paste("día", dia)), vjust = -0.8) +
+  labs(x = "Producción (t)", y = "Consumo (kWh)")
+```
+
+```{r m-lineal}
+m_lin <- lm(consumo_kwh ~ produccion_t, data = energia)
+summary(m_lin)$coefficients |> kable(digits = 3)
+par(mfrow = c(2, 2)); plot(m_lin); par(mfrow = c(1, 1))
+```
+
+**Lectura:**
+
+- *Residuales vs. ajustados:* forma de **embudo** → la varianza crece con el nivel.
+- *Escala-ubicación:* tendencia creciente (confirma heterocedasticidad).
+- *Residuales vs. apalancamiento:* el **día 40** se acerca o supera las curvas de Cook.
+
+```{r pruebas-lin}
+ncvTest(m_lin)
+```
+
+### 2.1 Influencia
+
+```{r influencia}
+p <- length(coef(m_lin)); n <- nrow(energia)
+augment(m_lin) |>
+  mutate(dia = energia$dia, r_stud = rstudent(m_lin)) |>
+  select(dia, produccion_t, consumo_kwh, .hat, r_stud, .cooksd) |>
+  arrange(desc(.cooksd)) |> head(5) |>
+  kable(digits = 3, caption = sprintf("Referencias: h > %.3f, |r| > 3, Cook > %.3f", 2 * p / n, 4 / n))
+influencePlot(m_lin)
+```
+
+El día 40 tiene **residual estudentizado muy grande** y la mayor distancia de Cook.
+Al revisar la bitácora, el registro resulta ser un **error de digitación** en la
+producción de ese día (el consumo real corresponde a una producción mucho menor). Se
+excluye **documentando la causa**:
+
+```{r sin-40}
+energia_ok <- filter(energia, dia != 40)
+m_lin2 <- lm(consumo_kwh ~ produccion_t, data = energia_ok)
+bind_rows(tidy(m_lin) |> mutate(datos = "Con día 40"),
+          tidy(m_lin2) |> mutate(datos = "Sin día 40")) |>
+  select(datos, term, estimate, std.error) |> kable(digits = 3)
+```
+
+### 2.2 Transformación: Box-Cox y log-log
+
+```{r boxcox, fig.height = 4}
+bc <- MASS::boxcox(m_lin2, lambda = seq(-1, 1.5, 0.01))
+lambda_hat <- bc$x[which.max(bc$y)]
+ic_lambda <- range(bc$x[bc$y > max(bc$y) - qchisq(0.95, 1) / 2])
+c(lambda_hat = lambda_hat, ic_inf = ic_lambda[1], ic_sup = ic_lambda[2])
+ncvTest(m_lin2)   # sin el día 40, la heterocedasticidad persiste
+```
+
+Box-Cox sugiere $\lambda \approx$ `r round(lambda_hat, 2)` (el IC excluye 1: **hay que
+transformar**). Box-Cox solo transforma $y$; como el consumo de energía crece de forma
+**multiplicativa** con la producción, una alternativa con más sentido físico e
+interpretable es transformar **ambas** variables con logaritmo (modelo log-log) y
+validar el resultado con los residuales:
+
+```{r loglog}
+m_log <- lm(log(consumo_kwh) ~ log(produccion_t), data = energia_ok)
+summary(m_log)
+par(mfrow = c(2, 2)); plot(m_log); par(mfrow = c(1, 1))
+ncvTest(m_log)
+shapiro.test(residuals(m_log))
+```
+
+El embudo desaparece y las pruebas ya no rechazan.
+
+**Interpretación (elasticidad):** un aumento del 1 % en la producción se asocia con un
+aumento de aproximadamente `r round(coef(m_log)[2], 2)` % en el consumo (IC 95 %:
+`r round(confint(m_log)[2, 1], 3)` a `r round(confint(m_log)[2, 2], 3)`). Como el IC
+queda por debajo de 1, hay **economía de escala**: el consumo por tonelada baja cuando
+sube la producción.
+
+### 2.3 Predicción en la escala original
+
+```{r pred-log}
+nuevo <- tibble(produccion_t = 100)
+predict(m_log, nuevo, interval = "prediction") |> exp() |> round(0)
+```
+
+Para 100 t, el consumo de **un día** debería estar en ese intervalo (kWh). Un día fuera de
+él merece investigarse: es la base de un control estadístico del consumo.
+
+## 3. Flujo resumido
+
+1. Ajustar → 2. Graficar residuales → 3. Investigar influyentes → 4. Transformar o
+reespecificar → 5. Validar de nuevo → 6. Interpretar y predecir.

@@ -1,0 +1,171 @@
+---
+title: "01 · Variabilidad y descriptiva comparativa"
+subtitle: "Sesión 1 — Variabilidad, normalidad e inferencia"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Detectar una **mezcla de poblaciones** (caso bimodal) y encontrar la causa asignable
+  mediante **estratificación**.
+- Comparar grupos con diagrama de cajas, violín, histograma y acumulada empírica.
+- Resumir posición y dispersión por grupo, calcular puntajes Z y contrastar la **regla
+  empírica**.
+
+**Paquetes:** `tidyverse`, `knitr`, `patchwork`.
+
+> Teoría: [`../teoria/01-datos-variabilidad.md`](../teoria/01-datos-variabilidad.md) y
+> [`../teoria/02-descriptiva-comparativa.md`](../teoria/02-descriptiva-comparativa.md).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(patchwork)
+theme_set(theme_minimal(base_size = 12))
+```
+
+## 1. Los datos
+
+Una envasadora con **dos boquillas** llena botellas de **500 mL** (tolerancia ±4 mL).
+Se registraron 120 envases en orden de producción, alternando boquillas, en dos turnos.
+
+```{r datos}
+llenado <- read_csv("../datos/llenado-envases.csv")
+glimpse(llenado)
+LIE <- 496; LSE <- 504; nominal <- 500
+```
+
+## 2. Mirar toda la muestra primero
+
+```{r hist-global}
+ggplot(llenado, aes(volumen_ml)) +
+  geom_histogram(binwidth = 0.5, fill = "steelblue", colour = "white") +
+  geom_vline(xintercept = c(LIE, nominal, LSE), linetype = c(2, 1, 2)) +
+  labs(title = "Volumen de llenado (todas las boquillas)", x = "Volumen (mL)", y = "Frecuencia")
+```
+
+El histograma tiene **dos jorobas**: es una señal de que los datos provienen de una
+mezcla de dos poblaciones.
+
+```{r resumen-global}
+llenado |>
+  summarise(n = n(), media = mean(volumen_ml), mediana = median(volumen_ml),
+            s = sd(volumen_ml), RIC = IQR(volumen_ml),
+            min = min(volumen_ml), max = max(volumen_ml)) |>
+  kable(digits = 2)
+```
+
+## 3. Estratificar por boquilla
+
+```{r hist-estratificado}
+ggplot(llenado, aes(volumen_ml, fill = boquilla)) +
+  geom_histogram(binwidth = 0.5, colour = "white", alpha = 0.8, position = "identity") +
+  geom_vline(xintercept = c(LIE, nominal, LSE), linetype = c(2, 1, 2)) +
+  labs(title = "Volumen por boquilla", x = "Volumen (mL)", y = "Frecuencia")
+```
+
+```{r resumen-grupos}
+resumen <- llenado |>
+  group_by(boquilla) |>
+  summarise(n = n(), media = mean(volumen_ml), mediana = median(volumen_ml),
+            s = sd(volumen_ml), RIC = IQR(volumen_ml), CV_pct = 100 * s / media,
+            min = min(volumen_ml), max = max(volumen_ml))
+kable(resumen, digits = 2)
+```
+
+Cada boquilla tiene una desviación estándar de alrededor de
+`r round(mean(resumen$s), 2)` mL, mientras que la desviación global es
+`r round(sd(llenado$volumen_ml), 2)` mL: **la mayor parte de la variabilidad total se
+debe a la diferencia entre boquillas** (causa asignable), no al ruido de cada una.
+
+## 4. Cuatro gráficos para comparar grupos
+
+```{r comparativos, fig.height = 7}
+g1 <- ggplot(llenado, aes(boquilla, volumen_ml, fill = boquilla)) +
+  geom_boxplot(show.legend = FALSE) + labs(title = "Cajas", x = NULL, y = "mL")
+g2 <- ggplot(llenado, aes(boquilla, volumen_ml, fill = boquilla)) +
+  geom_violin(show.legend = FALSE) +
+  geom_jitter(width = 0.08, size = 0.8, alpha = 0.5, show.legend = FALSE) +
+  labs(title = "Violín + datos", x = NULL, y = "mL")
+g3 <- ggplot(llenado, aes(volumen_ml, fill = boquilla)) +
+  geom_density(alpha = 0.5) + labs(title = "Densidad", x = "mL", y = NULL)
+g4 <- ggplot(llenado, aes(volumen_ml, colour = boquilla)) +
+  stat_ecdf(linewidth = 1) + labs(title = "Acumulada empírica", x = "mL", y = "F(x)")
+(g1 + g2) / (g3 + g4)
+```
+
+> El diagrama de cajas de **todos** los datos juntos no habría revelado la bimodalidad;
+> el histograma y el violín sí.
+
+## 5. ¿Influye el turno?
+
+```{r turno}
+llenado |>
+  group_by(boquilla, turno) |>
+  summarise(media = mean(volumen_ml), s = sd(volumen_ml), .groups = "drop") |>
+  kable(digits = 2)
+```
+
+Las diferencias entre turnos, dentro de cada boquilla, son pequeñas frente a la
+diferencia entre boquillas.
+
+## 6. Puntaje Z y regla empírica
+
+```{r regla-empirica}
+regla <- function(y) {
+  z <- (y - mean(y)) / sd(y)
+  c(`|z|<=1` = mean(abs(z) <= 1), `|z|<=2` = mean(abs(z) <= 2), `|z|<=3` = mean(abs(z) <= 3))
+}
+bind_rows(
+  tibble(grupo = "Todos", !!!regla(llenado$volumen_ml)),
+  llenado |> group_by(grupo = boquilla) |>
+    summarise(as_tibble_row(regla(volumen_ml)))
+) |>
+  mutate(across(-grupo, ~ round(100 * .x, 1))) |>
+  kable(caption = "Porcentaje observado dentro de ±k s (esperado: 68 / 95 / 99.7 %)")
+```
+
+En los datos **mezclados**, el porcentaje dentro de ±1 s se aleja del 68 % esperado: la
+regla empírica no aplica a una mezcla. Dentro de cada boquilla se cumple razonablemente.
+
+## 7. Atípicos y conformidad con la especificación
+
+```{r atipicos}
+llenado |>
+  group_by(boquilla) |>
+  mutate(Q1 = quantile(volumen_ml, .25), Q3 = quantile(volumen_ml, .75),
+         atipico = volumen_ml < Q1 - 1.5 * (Q3 - Q1) | volumen_ml > Q3 + 1.5 * (Q3 - Q1)) |>
+  filter(atipico) |>
+  select(orden, turno, boquilla, volumen_ml) |>
+  kable()
+
+llenado |>
+  group_by(boquilla) |>
+  summarise(fuera_espec = sum(volumen_ml < LIE | volumen_ml > LSE),
+            desvio_vs_nominal = mean(volumen_ml) - nominal) |>
+  kable(digits = 2)
+```
+
+Si la primera tabla aparece vacía, ninguna observación cae fuera de las vallas de Tukey
+**dentro de su boquilla**. Aun sin atípicos, la descentración de B2 ya produce envases por
+debajo del límite inferior: el problema es de **centrado**, no de dispersión.
+
+## 8. Conclusiones
+
+- La distribución global es **bimodal** porque mezcla dos boquillas.
+- **B1 sobrellena** (≈ `r round(resumen$media[1] - nominal, 1)` mL) y **B2 subllena**
+  (≈ `r round(resumen$media[2] - nominal, 1)` mL). Es una **causa asignable**: la acción es
+  recalibrar cada boquilla al nominal.
+- La variabilidad **dentro** de cada boquilla es pequeña frente a la tolerancia; una vez
+  centradas, el proceso podría cumplir holgadamente.
+- En el lenguaje de ASC22: *boquilla* sería un **factor** con dos **niveles**, el
+  *volumen* la **respuesta**, y la dispersión dentro de cada boquilla, el **error**.

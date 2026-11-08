@@ -1,0 +1,65 @@
+---
+title: "Título del análisis"
+subtitle: "Proceso / organización"
+author: "NOMBRE APELLIDO"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse)
+library(knitr)
+theme_set(theme_minimal(base_size = 12))
+```
+
+# Resumen ejecutivo
+
+*Tres a cinco líneas: pregunta, respuesta con su magnitud e IC, y recomendación.*
+
+# 1. Contexto y pregunta
+
+- **Proceso:**
+- **Característica de calidad (respuesta) y unidades:**
+- **Especificación:**
+- **Pregunta:**
+
+# 2. Datos
+
+- **Origen y periodo:**
+- **Unidad experimental / de medición; réplicas:**
+- **Variables:**
+
+```{r datos}
+# df <- read_csv("ruta/relativa/datos.csv")
+```
+
+# 3. Análisis exploratorio
+
+```{r exploracion}
+
+```
+
+# 4. Inferencia o modelo
+
+**Hipótesis:** $H_0$: … $\quad H_1$: … $\quad \alpha =$ …
+
+```{r inferencia}
+
+```
+
+# 5. Verificación de supuestos
+
+```{r supuestos}
+
+```
+
+# 6. Conclusiones y recomendaciones
+
+- **Estadística:**
+- **Práctica (en unidades del proceso):**
+- **Siguiente paso:**

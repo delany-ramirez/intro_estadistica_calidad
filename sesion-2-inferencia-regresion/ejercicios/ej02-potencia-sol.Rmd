@@ -1,0 +1,71 @@
+---
+title: "Solución · Ejercicio 02 — Potencia y tamaño de muestra"
+subtitle: "Sesión 2"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse); library(knitr)
+theme_set(theme_minimal(base_size = 12))
+```
+
+## a) Potencia del estudio original
+
+```{r a}
+pa <- power.t.test(n = 14, delta = 10, sd = 12, sig.level = 0.05)$power
+c(potencia = pa, beta = 1 - pa) |> round(3)
+```
+
+Si la diferencia real fuera de 10 kgf, el estudio la detectaría con probabilidad
+`r round(pa, 2)`; en `r round(100 * (1 - pa))` de cada 100 estudios así, se concluiría
+erróneamente que no hay diferencia relevante (**error tipo II**).
+
+## b) Tamaño de muestra
+
+```{r b}
+n80 <- ceiling(power.t.test(power = 0.80, delta = 10, sd = 12)$n)
+n90 <- ceiling(power.t.test(power = 0.90, delta = 10, sd = 12)$n)
+c(n_80 = n80, n_90 = n90)
+```
+
+## c) Curvas de potencia
+
+```{r c}
+curvas <- expand_grid(n = c(14, n90), delta = seq(0, 25, 0.25)) |>
+  mutate(potencia = map2_dbl(n, delta, ~ power.t.test(n = .x, delta = .y, sd = 12)$power))
+ggplot(curvas, aes(delta, potencia, colour = factor(n))) +
+  geom_line(linewidth = 1) + geom_hline(yintercept = 0.8, linetype = 2) +
+  labs(x = "Diferencia real (kgf)", y = "Potencia", colour = "n por grupo")
+dmin <- power.t.test(n = 14, power = 0.80, sd = 12)$delta
+dmin
+```
+
+Con 14 cajas por grupo solo se detecta con potencia 0.80 una diferencia de unos
+**`r round(dmin, 1)` kgf**, mayor que el umbral de 10 kgf.
+
+## d) Reducir sigma
+
+```{r d}
+n90_s8 <- ceiling(power.t.test(power = 0.90, delta = 10, sd = 8)$n)
+c(n_90_sigma12 = n90, n_90_sigma8 = n90_s8)
+```
+
+Reducir $\sigma$ de 12 a 8 baja el $n$ necesario de `r n90` a `r n90_s8` cajas por
+proveedor (el $n$ escala con $\sigma^2$). Conviene comparar el costo del ensayo nuevo con
+el de ensayar `r 2 * (n90 - n90_s8)` cajas adicionales en cada evaluación futura.
+
+## e) Muchas pruebas t
+
+```{r e}
+m <- choose(4, 2)
+c(comparaciones = m, P_falsa_alarma = 1 - 0.95^m) |> round(3)
+```
+
+Con `r m` comparaciones, la probabilidad de al menos una falsa alarma es cercana a
+`r round(1 - 0.95^m, 2)`. El **ANOVA** compara todas las medias con una sola prueba $F$;
+después, comparaciones múltiples con control del error por familia (Tukey), que se
+estudian en ASC22.

@@ -1,0 +1,363 @@
+---
+title: "Sesión 1 — Variabilidad, Normalidad e Inferencia"
+subtitle: "AS001 Análisis Estadístico · Maestría en Sistemas Integrados de Gestión de la Calidad"
+format:
+  revealjs:
+    theme: [simple, ../custom.scss]
+    embed-resources: true
+    slide-number: true
+    transition: slide
+    highlight-style: github
+    html-math-method: katex
+    width: 1280
+    height: 720
+    margin: 0.05
+    scrollable: true
+    incremental: false
+lang: es
+---
+
+## Agenda del día
+
+| Hora | Bloque |
+|---|---|
+| 8:00 | Presentación del curso y ruta hacia ASC22 |
+| 8:10 | Lectura del diagnóstico de entrada |
+| 8:30 | **Parte 1** — Datos y variabilidad: el caso bimodal |
+| 9:25 | **Parte 2** — Descriptiva comparativa en R |
+| 10:20 | *Receso* |
+| 10:40 | **Parte 3** — Normalidad y Teorema Central del Límite |
+| 11:35 | **Parte 4** — Del intervalo de confianza a la prueba |
+| 12:20 | *Pausa* |
+| 12:30 | **Parte 5** — H₀, H₁, errores y valor p |
+| 13:20 | **Taller integrador 1 (20 %)** |
+
+## ¿Por qué este curso? {.smaller}
+
+::: {.columns}
+
+::: {.column width="50%" .box-blue}
+### Resultados de aprendizaje
+
+- **RAA1** Organizar y visualizar datos de procesos; detectar atípicos
+- **RAA2** Modelar la variabilidad y verificar normalidad
+- **RAA3** Estimar y contrastar hipótesis; valor p, errores, potencia
+- **RAA4** Ajustar regresiones y validar supuestos con residuales
+:::
+
+::: {.column width="50%" .box-green}
+### Ruta hacia ASC22
+
+Diseño y Desarrollo de Experimentos usa **todo** esto:
+
+- Réplica, aleatorización, error experimental
+- Prueba $F$ y partición de la variabilidad
+- Potencia → ¿cuántas réplicas?
+- Residuales → validar cada ANOVA
+:::
+
+:::
+
+### Evaluación
+
+| Pre-trabajo 1 | Taller 1 (hoy) | Pre-trabajo 2 | Evaluación individual |
+|:---:|:---:|:---:|:---:|
+| 15 % | 20 % | 15 % | 50 % |
+
+## Lectura del diagnóstico
+
+::: {.box-yellow}
+**Dinámica (20 min)**
+
+1. Resultados por bloque: datos · normalidad · inferencia · regresión
+2. Los 2–3 ítems con más errores: ¿quién explica su razonamiento?
+3. En qué bloque de hoy se retoma cada concepto
+:::
+
+## {background-color="#1a365d" .center}
+
+[Parte 1]{.parte-numero}
+
+[Datos y Variabilidad]{.parte-titulo}
+
+## Toda característica de calidad varía
+
+| Causa | Naturaleza | Acción |
+|---|---|---|
+| **Común** | Muchas fuentes pequeñas; patrón estable | Cambiar el sistema (DOE) |
+| **Asignable** | Fuente identificable: máquina, turno, lote | Encontrarla y eliminarla |
+
+<br>
+
+> Un proceso con solo causas comunes está **en control estadístico**: su variabilidad
+> se puede modelar con una distribución.
+
+## Unidad experimental, réplica y repetición {.smaller}
+
+::: {.columns}
+
+::: {.column width="50%" .box-blue}
+### Réplica
+Aplicar la condición a **otra unidad experimental**.
+
+Captura la variabilidad del **proceso**.
+
+Estima el **error experimental** $\sigma^2$.
+:::
+
+::: {.column width="50%" .box-yellow}
+### Repetición
+Medir otra vez **la misma unidad**.
+
+Captura solo la variabilidad de la **medición**.
+
+⚠️ 5 lecturas de un envase = **1** réplica.
+:::
+
+:::
+
+<br>
+
+**Aleatorizar** protege de lo desconocido y justifica la independencia.
+**Estratificar** separa los datos por posibles causas asignables.
+
+## Caso: dos boquillas, una envasadora
+
+120 envases de **500 mL** (tolerancia ±4 mL), dos boquillas, dos turnos.
+
+::: {.box-red}
+El histograma de todos los datos tiene **dos jorobas** → mezcla de dos poblaciones.
+:::
+
+$$
+f(y) = p\,f_{B1}(y) + (1-p)\,f_{B2}(y)
+$$
+
+- La $s$ global **sobrestima** la variabilidad de cada boquilla
+- La prueba de normalidad **rechaza**
+- Al estratificar: **B1 sobrellena, B2 subllena** → recalibrar
+
+👉 `notebooks/01-variabilidad-descriptiva.Rmd` §1–3
+
+## Vocabulario que retoma ASC22
+
+| Término | Aquí | En ASC22 |
+|---|---|---|
+| **Respuesta** $y$ | Volumen de llenado | Variable que el experimento explica |
+| **Factor** | Boquilla (observada) | Variable que se **manipula** |
+| **Nivel** | B1, B2 | Valores elegidos del factor |
+| **Error experimental** | Variación dentro de cada boquilla | Variación entre UE tratadas igual |
+
+<br>
+
+> Observacional → **asociación**. Experimento aleatorizado → **causa**.
+
+## {background-color="#1a365d" .center}
+
+[Parte 2]{.parte-numero}
+
+[Descriptiva Comparativa]{.parte-titulo}
+
+## Posición, dispersión y Z {.smaller}
+
+::: {.columns}
+
+::: {.column width="50%"}
+| Medida | Robusta |
+|---|:---:|
+| Media $\bar{y}$ | ❌ |
+| Mediana | ✅ |
+| Desviación $s$ | ❌ |
+| RIC $= Q_3 - Q_1$ | ✅ |
+| CV $= s/\bar{y}$ | ❌ |
+:::
+
+::: {.column width="50%"}
+$$z_i = \frac{y_i-\bar{y}}{s}$$
+
+**Regla empírica** (datos en campana):
+
+±1s ≈ 68 % · ±2s ≈ 95 % · ±3s ≈ 99.7 %
+
+**Atípicos (Tukey):**
+$[Q_1 - 1.5\,\text{RIC},\ Q_3 + 1.5\,\text{RIC}]$
+:::
+
+:::
+
+> Un atípico se **investiga**, no se borra.
+
+## Cuatro gráficos para comparar
+
+| Gráfico | Muestra bien | Cuidado |
+|---|---|---|
+| **Cajas** | Mediana, RIC, atípicos | Oculta la bimodalidad |
+| **Violín** | Forma completa | Suaviza con $n$ pequeño |
+| **Histograma** | Modas, asimetría | Ancho de clase |
+| **Acumulada (ECDF)** | Percentiles, distribución completa | Menos intuitiva |
+
+<br>
+
+👉 Práctica 01 §4–8 · **Ejercicio 01** (resistencia de hilo, 3 proveedores)
+
+## {background-color="#1a365d" .center}
+
+[Parte 3]{.parte-numero}
+
+[Normalidad y Teorema Central del Límite]{.parte-titulo}
+
+## ¿Son normales mis datos? {.smaller}
+
+::: {.columns}
+
+::: {.column width="50%"}
+### Gráfico Q-Q
+
+| Patrón | Diagnóstico |
+|---|---|
+| Recta | Compatible |
+| Curva J / U | Asimetría derecha |
+| Forma de S | Colas distintas |
+| **Escalón** | **Mezcla** |
+| Punto aislado | Atípico |
+:::
+
+::: {.column width="50%"}
+### Pruebas ($H_0$: normal)
+
+- **Shapiro-Wilk** `shapiro.test(y)`
+- **Anderson-Darling** `nortest::ad.test(y)`
+
+⚠️ $n$ pequeño → poca potencia
+⚠️ $n$ enorme → rechaza diferencias triviales
+
+**Siempre Q-Q + prueba.**
+:::
+
+:::
+
+## Teorema Central del Límite
+
+$$
+\bar{y} \;\dot\sim\; N\!\left(\mu,\ \frac{\sigma^2}{n}\right) \qquad \text{error estándar} = \frac{\sigma}{\sqrt{n}}
+$$
+
+::: {.columns}
+
+::: {.column width="50%" .box-green}
+### ✅ Asegura
+- La **media** es aprox. normal con $n$ grande
+- El EE baja como $1/\sqrt{n}$
+- Robustez de IC y pruebas **para la media**
+:::
+
+::: {.column width="50%" .box-red}
+### ❌ No asegura
+- Que los **datos** sean normales
+- Que $n = 30$ siempre baste
+- Robustez para la **varianza** ($\chi^2$, $F$)
+- Nada sin **independencia**
+:::
+
+:::
+
+👉 Práctica 02 · **Ejercicio 02**
+
+## {background-color="#1a365d" .center}
+
+[Parte 4]{.parte-numero}
+
+[Del Intervalo de Confianza a la Prueba]{.parte-titulo}
+
+## Tres distribuciones muestrales
+
+| Estadístico | Distribución | Para | R |
+|---|---|---|---|
+| $\dfrac{\bar{y}-\mu}{s/\sqrt{n}}$ | $t_{n-1}$ | Una media | `qt`, `pt` |
+| $\dfrac{(n-1)s^2}{\sigma^2}$ | $\chi^2_{n-1}$ | Una varianza | `qchisq`, `pchisq` |
+| $\dfrac{s_1^2/\sigma_1^2}{s_2^2/\sigma_2^2}$ | $F_{n_1-1,n_2-1}$ | Dos varianzas | `qf`, `pf` |
+
+<br>
+
+$$
+\text{IC media: } \bar{y} \pm t_{\alpha/2,n-1}\frac{s}{\sqrt{n}}
+\qquad
+\text{IC varianza: } \left[\tfrac{(n-1)s^2}{\chi^2_{\alpha/2}},\ \tfrac{(n-1)s^2}{\chi^2_{1-\alpha/2}}\right]
+$$
+
+## Interpretar un IC
+
+::: {.box-blue}
+Si se repitiera el muestreo muchas veces, el **95 % de los intervalos** así construidos
+contendría el verdadero parámetro. La confianza es del **procedimiento**.
+:::
+
+<br>
+
+**Ejemplo — espesor de recubrimiento** ($n = 25$, objetivo 50 µm):
+IC 95 % para $\mu$ = [50.64, 51.91] µm → el proceso está **por encima** del objetivo.
+
+<br>
+
+**Dualidad:** se rechaza $H_0: \theta = \theta_0$ ⟺ $\theta_0 \notin$ IC.
+
+## {background-color="#1a365d" .center}
+
+[Parte 5]{.parte-numero}
+
+[H₀, H₁, Errores y Valor p]{.parte-titulo}
+
+## Los dos errores en calidad
+
+| Decisión \ Realidad | $H_0$ verdadera | $H_0$ falsa |
+|---|---|---|
+| **No rechazar** | Correcto $(1-\alpha)$ | **Tipo II** $(\beta)$ — no detectar |
+| **Rechazar** | **Tipo I** $(\alpha)$ — falsa alarma | Correcto: **potencia** |
+
+<br>
+
+- **Tipo I:** detener un proceso que estaba bien (riesgo del productor)
+- **Tipo II:** despachar producto no conforme (riesgo del consumidor)
+
+## El valor p, bien leído {.smaller}
+
+> Probabilidad, **suponiendo $H_0$ cierta**, de un resultado tan o más extremo que el observado.
+
+| ✅ Correcto | ❌ Incorrecto |
+|---|---|
+| "Si la humedad media fuera 11 %, sería raro (p = 0.013) ver una media tan alta" | "Hay 1.3 % de probabilidad de que $H_0$ sea cierta" |
+| "No hay evidencia suficiente de que difiera de 500 mL" | "Se demostró que es 500 mL" |
+| "Significativo; la diferencia es de 0.1–0.4 mL, irrelevante" | "Significativo, luego importante" |
+
+<br>
+
+👉 Práctica 03 · **Ejercicio 03** (grasa de leche): discutir en parejas
+
+## {background-color="#1a365d" .center}
+
+[Taller integrador 1]{.parte-numero}
+
+[Peso de tabletas · 40 min · 20 %]{.parte-titulo}
+
+## Taller integrador 1
+
+::: {.box-yellow}
+- **Enunciado:** `sesion-1-variabilidad-inferencia/ejercicios/taller-integrador-1.md`
+- **Plantilla:** `taller-integrador-1_plantilla.Rmd`
+- **Datos:** `datos/peso-tabletas.csv`
+- **Entrega:** `.Rmd` + `.html` en la plataforma, al cierre
+:::
+
+| Problema | Tiempo | Puntos |
+|---|:---:|:---:|
+| 1. Descripción y atípicos | 12 min | 30 |
+| 2. Normalidad | 10 min | 25 |
+| 3. Inferencia (T1) | 15 min | 30 |
+| Conclusión | 3 min | 10 |
+| Reproducibilidad | — | 5 |
+
+## Para la próxima sesión {.center}
+
+- **Pre-trabajo 2** — cierre el miércoles, 23:59
+- Lecturas: pruebas $t$, potencia, correlación y regresión
+- Ten a mano el `recursos/cheatsheet-estadistica-r.md`

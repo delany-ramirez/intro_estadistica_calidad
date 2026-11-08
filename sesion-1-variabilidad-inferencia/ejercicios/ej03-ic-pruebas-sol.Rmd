@@ -1,0 +1,97 @@
+---
+title: "Solución · Ejercicio 03 — IC y pruebas para una muestra"
+subtitle: "Sesión 1"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 6, fig.height = 3.5)
+library(tidyverse); library(knitr)
+theme_set(theme_minimal(base_size = 12))
+grasa <- read_csv("../datos/grasa-leche.csv")$grasa_pct
+n <- length(grasa); ybar <- mean(grasa); s <- sd(grasa)
+```
+
+## a) Resumen y normalidad
+
+```{r resumen}
+c(n = n, media = ybar, s = s) |> round(4)
+shapiro.test(grasa)
+qqnorm(grasa); qqline(grasa, col = "red")
+```
+
+No hay evidencia contra la normalidad. Es más crítica para e): la prueba e IC para la
+**varianza** ($\chi^2$) **no** son robustos a la no normalidad, mientras que la $t$ para
+la media sí lo es razonablemente gracias al TCL.
+
+## b) IC del 95 % para la media
+
+```{r ic}
+semiancho <- qt(0.975, n - 1) * s / sqrt(n)
+c(inf = ybar - semiancho, sup = ybar + semiancho) |> round(3)
+t.test(grasa)$conf.int
+```
+
+Con el procedimiento usado, el 95 % de los intervalos construidos así contendrían la
+grasa media real; los valores plausibles para la media van de
+`r round(ybar - semiancho, 3)` a `r round(ybar + semiancho, 3)` %.
+
+## c) Prueba bilateral
+
+$H_0: \mu = 3.0$ vs. $H_1: \mu \ne 3.0$, $\alpha = 0.05$.
+
+```{r prueba}
+prueba <- t.test(grasa, mu = 3.0)
+prueba
+```
+
+Con valor p = `r round(prueba$p.value, 3)` > 0.05 **no se rechaza $H_0$**. Coincide
+con el IC, que **contiene** 3.0 (dualidad IC–prueba).
+
+## d) "Quedó demostrado..."
+
+No rechazar $H_0$ **no demuestra** que $\mu = 3.0$: solo indica que los datos no aportan
+evidencia suficiente para afirmar lo contrario. El IC muestra que valores como
+`r round(ybar - semiancho, 2)` % también son plausibles. Si la media real fuese distinta
+de 3.0, se estaría cometiendo un **error tipo II**, cuya probabilidad depende de $n$
+(16 es poco), de $\sigma$ y de qué tan lejos esté la media real de 3.0.
+
+```{r potencia}
+# Potencia para detectar una media real de 2.96 % (0.04 puntos menos) con n = 16
+pot <- power.t.test(n = n, delta = 0.04, sd = s, sig.level = 0.05, type = "one.sample")$power
+c(potencia = pot, beta = 1 - pot) |> round(3)
+```
+
+Si la grasa real fuera 2.96 %, la prueba solo lo detectaría con probabilidad
+`r round(pot, 2)`: el riesgo de error tipo II sería de `r round(1 - pot, 2)`.
+
+## e) Prueba e IC para la desviación estándar
+
+$H_0: \sigma \ge 0.15$ vs. $H_1: \sigma < 0.15$.
+
+```{r var}
+chi0 <- (n - 1) * s^2 / 0.15^2
+ic_sigma <- sqrt((n - 1) * s^2 / qchisq(c(0.975, 0.025), n - 1))
+c(chi0 = chi0, valor_p = pchisq(chi0, n - 1), sigma_inf = ic_sigma[1], sigma_sup = ic_sigma[2]) |>
+  round(4)
+```
+
+Se rechaza $H_0$ ($\alpha = 0.05$, unilateral): hay evidencia de que $\sigma < 0.15$ %, de
+modo que el requisito del cliente se cumple. El IC **bilateral** al 95 % roza 0.15 en su
+extremo superior; no hay contradicción, porque la prueba unilateral al 5 % equivale a un
+IC **unilateral** al 95 % (o a uno bilateral al 90 %), que sí queda por debajo de 0.15:
+
+```{r ic-unilateral}
+sqrt((n - 1) * s^2 / qchisq(0.05, n - 1))   # cota superior unilateral al 95 %
+```
+
+## f) Errores en contexto
+
+- **Tipo I:** concluir que la grasa media difiere de 3.0 % cuando en realidad cumple →
+  sanción o reproceso innecesario (riesgo del productor).
+- **Tipo II:** concluir que no hay diferencia cuando la grasa real es menor que lo
+  rotulado → el consumidor recibe menos grasa de la declarada. Es el que más le preocupa al
+  **consumidor**; se reduce aumentando $n$.

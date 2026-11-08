@@ -1,0 +1,87 @@
+---
+title: "Solución · Ejercicio 03 — Regresión lineal simple y múltiple"
+subtitle: "Sesión 2"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 3.5)
+library(tidyverse); library(knitr); library(broom)
+theme_set(theme_minimal(base_size = 12))
+tost <- read_csv("../datos/tostion-cafe.csv")
+```
+
+## a) Exploración
+
+```{r a}
+tost |>
+  pivot_longer(c(tiempo_min, temperatura_c), names_to = "variable", values_to = "x") |>
+  ggplot(aes(x, perdida_peso_pct)) + geom_point() + geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ variable, scales = "free_x") + labs(x = NULL, y = "Pérdida de peso (%)")
+cor(tost[-1]) |> kable(digits = 3)
+```
+
+El **tiempo** tiene una correlación muy alta con la pérdida de peso; la temperatura,
+moderada.
+
+## b) Regresión simple
+
+```{r b}
+m1 <- lm(perdida_peso_pct ~ tiempo_min, data = tost)
+summary(m1)
+confint(m1)
+```
+
+$\hat{y} = `r round(coef(m1)[1], 3)` + `r round(coef(m1)[2], 3)`\,\text{tiempo}$.
+Por cada minuto adicional de tostión, la pérdida de peso media aumenta
+`r round(coef(m1)[2], 3)` puntos porcentuales (IC 95 %: `r round(confint(m1)[2, ], 3)`).
+$R^2 =$ `r round(summary(m1)$r.squared, 3)`.
+
+## c) Regresión múltiple
+
+```{r c}
+m2 <- lm(perdida_peso_pct ~ tiempo_min + temperatura_c, data = tost)
+tidy(m2, conf.int = TRUE) |> kable(digits = 4)
+bind_rows(glance(m1) |> mutate(modelo = "tiempo"),
+          glance(m2) |> mutate(modelo = "tiempo + temperatura")) |>
+  select(modelo, r.squared, adj.r.squared, sigma) |> kable(digits = 4)
+```
+
+$\hat{y} = `r round(coef(m2)[1], 3)` + `r round(coef(m2)[2], 3)`\,\text{tiempo} +
+`r round(coef(m2)[3], 4)`\,\text{temperatura}$. Ambos coeficientes son significativos;
+el $R^2$ ajustado sube y $\hat\sigma$ baja de `r round(sigma(m1), 3)` a
+`r round(sigma(m2), 3)` puntos.
+
+## d) Coeficiente de la temperatura
+
+**Manteniendo fijo el tiempo**, cada °C adicional de temperatura final se asocia con un
+aumento de `r round(coef(m2)[3], 3)` puntos en la pérdida de peso media
+(IC 95 %: `r round(confint(m2)[3, ], 3)`).
+
+## e) Predicción para 15 min y 215 °C
+
+```{r e}
+nuevo <- tibble(tiempo_min = 15, temperatura_c = 215)
+pred <- bind_rows(
+  as_tibble(predict(m2, nuevo, interval = "confidence")) |> mutate(tipo = "IC media"),
+  as_tibble(predict(m2, nuevo, interval = "prediction")) |> mutate(tipo = "IP bache")
+) |> relocate(tipo)
+kable(pred, digits = 2)
+```
+
+El IC para la media cabe dentro de 19–21 %, pero el **IP** de un bache individual va de
+`r round(pred$lwr[2], 2)` a `r round(pred$upr[2], 2)` %: con estas condiciones el
+promedio sí queda en el perfil buscado, pero **no se puede garantizar** que cada bache lo
+haga. Reducir la variabilidad entre baches (homogeneidad del grano, carga) es la vía.
+
+## f) Extrapolación
+
+```{r f}
+range(tost$tiempo_min)
+```
+
+22 min está **fuera del rango observado**: el modelo podría no ser lineal allí (el
+tostado cambia de fase). No es válido extrapolar.

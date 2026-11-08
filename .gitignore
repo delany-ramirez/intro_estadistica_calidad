@@ -1,0 +1,26 @@
+# --- R ---
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+Rplots.pdf
+
+# --- R Markdown / Quarto (salidas generadas) ---
+*_cache/
+*_files/
+notebooks/*.html
+ejercicios/*.html
+.quarto/
+
+# --- Editores / SO ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Salidas y temporales ---
+*.log
+*.tmp
+/outputs/

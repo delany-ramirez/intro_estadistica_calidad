@@ -1,0 +1,89 @@
+---
+title: "Solución · Ejercicio 02 — Normalidad, no conformidad y TCL"
+subtitle: "Sesión 1"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 3.5)
+library(tidyverse); library(knitr); library(nortest); library(patchwork)
+theme_set(theme_minimal(base_size = 12))
+peso <- read_csv("../datos/peso-bolsas-azucar.csv")$peso_g
+tiempo <- read_csv("../datos/tiempo-atencion.csv")$tiempo_min
+```
+
+## Parte A — Bolsas de azúcar
+
+### a) Normalidad
+
+```{r normalidad}
+h <- ggplot(tibble(peso), aes(peso)) + geom_histogram(bins = 10, fill = "steelblue", colour = "white") +
+  geom_vline(xintercept = 990, colour = "red", linetype = 2) + labs(x = "Peso (g)", y = "Frecuencia")
+q <- ggplot(tibble(peso), aes(sample = peso)) + geom_qq() + geom_qq_line(colour = "red") +
+  labs(x = "Cuantil teórico", y = "Peso (g)")
+h + q
+c(media = mean(peso), s = sd(peso)) |> round(2)
+c(Shapiro_p = shapiro.test(peso)$p.value, AD_p = ad.test(peso)$p.value) |> round(3)
+```
+
+Los puntos del Q-Q siguen la recta y ninguna prueba rechaza ($p > 0.05$): el modelo
+normal es razonable.
+
+### b) Proporción bajo 990 g
+
+```{r prop}
+mu <- mean(peso); s <- sd(peso)
+p_b <- pnorm(990, mu, s)
+c(z = (990 - mu) / s, proporcion = p_b, ppm = p_b * 1e6) |> round(4)
+```
+
+Se esperan unas **`r round(p_b * 1e6)` ppm** por debajo de 990 g.
+
+### c) Bajar la media a 998 g
+
+```{r escenario}
+p_c <- pnorm(990, 998, s)
+sigma_req <- (998 - 990) / qnorm(1 - p_b)
+c(ppm_con_998 = p_c * 1e6, sigma_requerida = sigma_req) |> round(2)
+```
+
+Con la misma $\sigma$, las bolsas bajo 990 g subirían a unas **`r round(p_c * 1e6)` ppm**.
+Para mantener el nivel actual habría que reducir $\sigma$ a **`r round(sigma_req, 2)` g**:
+centrar sin reducir variabilidad aumenta el riesgo de incumplir.
+
+### d) Error estándar
+
+```{r ee}
+c(EE_n50 = s / sqrt(50), n_para_mitad = 4 * 50)
+```
+
+Para reducir el error estándar a la mitad hay que **cuadruplicar** $n$ (200 bolsas).
+
+## Parte B — Tiempo de atención
+
+### e) Por qué no usar la normal para un tiempo individual
+
+```{r cola}
+c(observada = mean(tiempo > 25),
+  normal = 1 - pnorm(25, mean(tiempo), sd(tiempo)),
+  shapiro_p = shapiro.test(tiempo)$p.value) |> signif(3)
+```
+
+Los tiempos son **asimétricos a la derecha** (Shapiro rechaza). Un $n$ grande no vuelve
+normales a los datos individuales; la normal subestima la cola larga.
+
+### f) Promedio diario de 36 clientes
+
+```{r tcl}
+mu_t <- mean(tiempo); sigma_t <- sd(tiempo); ee <- sigma_t / sqrt(36)
+c(mu = mu_t, EE = ee, inf = mu_t - 1.96 * ee, sup = mu_t + 1.96 * ee) |> round(2)
+```
+
+### g) Por qué f) sí y e) no
+
+El TCL se aplica a la **media** de 36 tiempos independientes: su distribución es
+aproximadamente normal aunque los tiempos no lo sean. La pregunta e) es sobre un
+**dato individual**, al que el TCL no se aplica.

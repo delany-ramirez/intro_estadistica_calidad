@@ -1,0 +1,84 @@
+---
+title: "Solución · Pre-trabajo 1 — Repaso descriptivo y distribuciones"
+subtitle: "Uso exclusivo del docente"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse); library(knitr)
+theme_set(theme_minimal(base_size = 12))
+pernos <- read_csv("../../pre-trabajos/datos/diametro-pernos.csv") |>
+  mutate(turno = factor(turno, levels = c("manana", "tarde", "noche")))
+LIE <- 9.85; LSE <- 10.15
+```
+
+# Cuestionario (respuestas esperadas)
+
+1. UE = lámina; UM = punto medido; **10 réplicas** con 4 repeticiones cada una. Tratar
+   las 40 lecturas como independientes subestima la variabilidad entre láminas e infla
+   la significancia.
+2. Mediana y RIC dependen del orden de los datos, no de su magnitud extrema. Ejemplo libre
+   (tiempos de entrega con un día de paro, etc.).
+3. $z = (492-500)/3 = -2.67$; $P(Z < -2.67) \approx$ `r round(pnorm(-8/3), 4)`
+   (`r round(pnorm(-8/3) * 1e6)` ppm).
+4. Causa asignable: fuente identificable y no permanente de variación (máquina, turno,
+   lote). Separar los datos por esa variable la hace visible como diferencia entre grupos.
+5. Puntos que se curvan por encima de la recta en el extremo derecho (forma de J o U).
+
+# Ejercicio en R
+
+## a) Resumen por turno
+
+```{r a}
+pernos |> group_by(turno) |>
+  summarise(n = n(), media = mean(diametro_mm), mediana = median(diametro_mm),
+            s = sd(diametro_mm), RIC = IQR(diametro_mm),
+            min = min(diametro_mm), max = max(diametro_mm)) |>
+  kable(digits = 4)
+```
+
+## b) Gráficos
+
+```{r b}
+ggplot(pernos, aes(turno, diametro_mm)) + geom_boxplot(fill = "lightsteelblue") +
+  geom_hline(yintercept = c(LIE, LSE), linetype = 2, colour = "red") +
+  labs(x = "Turno", y = "Diámetro (mm)")
+ggplot(pernos, aes(diametro_mm)) + geom_histogram(bins = 12, fill = "steelblue", colour = "white") +
+  labs(x = "Diámetro (mm)", y = "Frecuencia")
+```
+
+## c) Z y regla empírica
+
+```{r c}
+z <- (pernos$diametro_mm - mean(pernos$diametro_mm)) / sd(pernos$diametro_mm)
+round(100 * c(k1 = mean(abs(z) <= 1), k2 = mean(abs(z) <= 2), k3 = mean(abs(z) <= 3)), 1)
+```
+
+Cercano a 68 / 95 / 99.7 %.
+
+## d) Normalidad
+
+```{r d}
+qqnorm(pernos$diametro_mm); qqline(pernos$diametro_mm, col = "red")
+shapiro.test(pernos$diametro_mm)
+```
+
+## e) Proporción fuera de especificación
+
+```{r e}
+mu <- mean(pernos$diametro_mm); s <- sd(pernos$diametro_mm)
+p_fuera <- pnorm(LIE, mu, s) + 1 - pnorm(LSE, mu, s)
+c(proporcion = p_fuera, ppm = p_fuera * 1e6) |> signif(3)
+sum(pernos$diametro_mm < LIE | pernos$diametro_mm > LSE)   # observados
+```
+
+## f) Conclusión esperada
+
+El turno de la **noche** tiene la media más alta y la mayor dispersión; aunque ningún
+perno está fuera de especificación, es el turno que más se acerca al límite superior.
+Se recomienda revisar ajuste y desgaste de herramienta en ese turno. (Se aceptan
+conclusiones equivalentes bien sustentadas en las cifras.)

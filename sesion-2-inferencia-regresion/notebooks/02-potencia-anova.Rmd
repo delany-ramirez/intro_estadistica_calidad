@@ -1,0 +1,139 @@
+---
+title: "02 · Potencia, tamaño de muestra y puente al ANOVA"
+subtitle: "Sesión 2 — Inferencia aplicada, regresión y supuestos"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Calcular potencia y tamaño de muestra con `power.t.test()` y `pwr`.
+- Construir e interpretar curvas de potencia.
+- Partir la variabilidad entre y dentro de grupos y obtener el estadístico $F$ a mano.
+
+**Paquetes:** `tidyverse`, `knitr`, `pwr`.
+
+> Teoría: [`../teoria/02-potencia-tamano-muestra.md`](../teoria/02-potencia-tamano-muestra.md) y
+> [`../teoria/03-puente-anova.md`](../teoria/03-puente-anova.md).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(pwr)
+theme_set(theme_minimal(base_size = 12))
+```
+
+## 1. ¿Tenía potencia la comparación de líneas?
+
+En la práctica 01, la línea A tuvo $n = 15$ y B $n = 18$, con $s \approx 3$ s. La
+gerencia considera **relevante** una diferencia de **2 s** por ciclo.
+
+```{r potencia-actual}
+pot <- power.t.test(n = 15, delta = 2, sd = 3, sig.level = 0.05)
+pot
+```
+
+Con 15 ciclos por línea, una diferencia real de 2 s se detectaría solo con probabilidad
+`r round(pot$power, 2)`. La diferencia observada fue mayor (≈ 3 s) y por eso se detectó,
+pero el estudio estaba **subdimensionado** para el umbral que le importa a la gerencia.
+
+```{r n-necesario}
+n80 <- power.t.test(power = 0.80, delta = 2, sd = 3, sig.level = 0.05)$n
+n90 <- power.t.test(power = 0.90, delta = 2, sd = 3, sig.level = 0.05)$n
+c(n_por_grupo_80 = ceiling(n80), n_por_grupo_90 = ceiling(n90))
+```
+
+Con el tamaño del efecto $d = \delta/\sigma$:
+
+```{r pwr}
+pwr.t.test(d = 2 / 3, power = 0.80, sig.level = 0.05, type = "two.sample")
+```
+
+## 2. Curvas de potencia
+
+```{r curva-delta}
+expand_grid(n = c(10, 20, 40), delta = seq(0, 5, by = 0.1)) |>
+  mutate(potencia = map2_dbl(n, delta, ~ power.t.test(n = .x, delta = .y, sd = 3)$power)) |>
+  ggplot(aes(delta, potencia, colour = factor(n))) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0.8, linetype = 2) +
+  labs(title = "Potencia vs. diferencia real (σ = 3 s, α = 0.05)",
+       x = "Diferencia real δ (s)", y = "Potencia", colour = "n por grupo")
+```
+
+```{r curva-n}
+tibble(n = 4:60) |>
+  mutate(`σ = 3` = map_dbl(n, ~ power.t.test(n = .x, delta = 2, sd = 3)$power),
+         `σ = 1.5` = map_dbl(n, ~ power.t.test(n = .x, delta = 2, sd = 1.5)$power)) |>
+  pivot_longer(-n, names_to = "sigma", values_to = "potencia") |>
+  ggplot(aes(n, potencia, colour = sigma)) +
+  geom_line(linewidth = 1) + geom_hline(yintercept = 0.8, linetype = 2) +
+  labs(title = "Reducir σ equivale a aumentar mucho n (δ = 2 s)",
+       x = "n por grupo", y = "Potencia", colour = NULL)
+```
+
+### Datos pareados
+
+Para el estudio de durómetros: ¿cuántas probetas para detectar un sesgo de 0.5 HRC si la
+desviación de las diferencias es 0.5?
+
+```{r pareada-n}
+ceiling(power.t.test(power = 0.90, delta = 0.5, sd = 0.5, type = "paired")$n)
+```
+
+## 3. Puente al ANOVA: rugosidad de tres proveedores
+
+```{r datos-rug}
+rug <- read_csv("../datos/rugosidad-proveedores.csv")
+rug |> group_by(proveedor) |>
+  summarise(n = n(), media = mean(rugosidad_um), s = sd(rugosidad_um)) |>
+  kable(digits = 3)
+ggplot(rug, aes(proveedor, rugosidad_um)) +
+  geom_jitter(width = 0.08, size = 2) +
+  stat_summary(fun = mean, geom = "crossbar", width = 0.4, colour = "red") +
+  geom_hline(yintercept = mean(rug$rugosidad_um), linetype = 2) +
+  labs(y = "Rugosidad Ra (µm)", title = "Media global (línea) y medias por grupo (rojo)")
+```
+
+### 3.1 Partición de la variabilidad a mano
+
+```{r particion}
+a <- n_distinct(rug$proveedor); N <- nrow(rug)
+gran_media <- mean(rug$rugosidad_um)
+tabla <- rug |>
+  group_by(proveedor) |>
+  mutate(media_grupo = mean(rugosidad_um)) |>
+  ungroup() |>
+  summarise(SC_entre = sum((media_grupo - gran_media)^2),
+            SC_dentro = sum((rugosidad_um - media_grupo)^2),
+            SC_total = sum((rugosidad_um - gran_media)^2))
+tabla |> kable(digits = 4)
+F0 <- (tabla$SC_entre / (a - 1)) / (tabla$SC_dentro / (N - a))
+c(F0 = F0, valor_p = 1 - pf(F0, a - 1, N - a)) |> signif(4)
+```
+
+Comprobación: `SC_entre + SC_dentro = SC_total`.
+
+### 3.2 Lo mismo con `aov()`
+
+```{r aov}
+summary(aov(rugosidad_um ~ proveedor, data = rug))
+```
+
+El ANOVA indica que **al menos un proveedor** difiere en rugosidad media. Cuál o cuáles
+difieren (comparaciones múltiples) y cómo diseñar el experimento se estudian en ASC22.
+
+### 3.3 ¿Por qué no tres pruebas t?
+
+```{r error-familia}
+tibble(m = c(1, 3, 6, 10, 15)) |>
+  mutate(P_al_menos_una_falsa_alarma = 1 - 0.95^m) |> kable(digits = 3)
+```

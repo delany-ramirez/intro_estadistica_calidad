@@ -1,0 +1,102 @@
+---
+title: "Solución · Ejercicio 01 — Pruebas t y razón de varianzas"
+subtitle: "Sesión 2"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 6, fig.height = 3.5)
+library(tidyverse); library(knitr)
+theme_set(theme_minimal(base_size = 12))
+cajas <- read_csv("../datos/resistencia-cajas.csv") |>
+  mutate(proveedor = factor(proveedor, levels = c("Norte", "Sur")))
+hornos <- read_csv("../datos/temperatura-hornos.csv") |> mutate(d = sensor_c - patron_c)
+```
+
+## Parte A — Cajas
+
+### a) Prueba e hipótesis
+
+Dos grupos de cajas **distintas e independientes** → $t$ de dos muestras. La preocupación
+es que Sur sea **menos** resistente:
+
+$$H_0: \mu_{\text{Norte}} - \mu_{\text{Sur}} \le 0 \qquad H_1: \mu_{\text{Norte}} - \mu_{\text{Sur}} > 0$$
+
+### b) Supuestos
+
+```{r supuestos}
+cajas |> group_by(proveedor) |>
+  summarise(n = n(), media = mean(resistencia_kgf), s = sd(resistencia_kgf),
+            shapiro_p = shapiro.test(resistencia_kgf)$p.value) |>
+  kable(digits = 3)
+var.test(resistencia_kgf ~ proveedor, data = cajas)
+```
+
+Normalidad razonable y no hay evidencia de varianzas distintas. Ambas versiones son
+válidas; se reporta **Welch** (opción por defecto y robusta), comprobando que la
+combinada da casi lo mismo.
+
+### c) Prueba
+
+```{r prueba}
+unilateral <- t.test(resistencia_kgf ~ proveedor, data = cajas, alternative = "greater")
+bilateral <- t.test(resistencia_kgf ~ proveedor, data = cajas)
+combinada <- t.test(resistencia_kgf ~ proveedor, data = cajas, alternative = "greater", var.equal = TRUE)
+tibble(prueba = c("Welch unilateral", "Combinada unilateral"),
+       t = c(unilateral$statistic, combinada$statistic),
+       gl = c(unilateral$parameter, combinada$parameter),
+       valor_p = c(unilateral$p.value, combinada$p.value)) |> kable(digits = 4)
+bilateral$conf.int
+```
+
+Con valor p = `r round(unilateral$p.value, 4)` < 0.05 se rechaza $H_0$: las cajas Sur son,
+en promedio, **menos resistentes**.
+
+### d) Significancia estadística vs. práctica
+
+La diferencia estimada es `r round(diff(rev(bilateral$estimate)), 1)` kgf, con IC 95 % de
+`r round(bilateral$conf.int[1], 1)` a `r round(bilateral$conf.int[2], 1)` kgf. El IC
+**incluye valores por debajo y por encima de 5 kgf**: la diferencia es estadísticamente
+significativa, pero los datos **no permiten afirmar** que sea prácticamente relevante.
+Recomendación: antes de decidir por precio, ampliar la muestra (ver ejercicio 02 de
+potencia) o evaluar si la resistencia de Sur cumple con holgura el requisito de apilamiento.
+
+## Parte B — Sensor de temperatura
+
+### e) Datos pareados
+
+Cada horno se mide con **ambos** instrumentos al mismo tiempo: la unidad (horno) es común
+a las dos lecturas. La variabilidad entre hornos (60 °C de rango) es enorme frente al
+posible sesgo del sensor; el emparejamiento la elimina.
+
+```{r diferencias}
+kable(hornos, digits = 2)
+shapiro.test(hornos$d)
+```
+
+### f) Prueba pareada
+
+```{r pareada}
+pareada <- t.test(hornos$sensor_c, hornos$patron_c, paired = TRUE)
+pareada
+```
+
+Con valor p = `r signif(pareada$p.value, 3)` se concluye que el sensor tiene un **sesgo**
+de `r round(pareada$estimate, 2)` °C (IC 95 %: `r round(pareada$conf.int, 2)`). Se debe
+corregir por calibración.
+
+### g) Análisis incorrecto
+
+```{r incorrecto}
+indep <- t.test(hornos$sensor_c, hornos$patron_c)
+tibble(analisis = c("Pareado", "Independiente (incorrecto)"),
+       error_estandar = c(pareada$stderr, indep$stderr),
+       valor_p = c(pareada$p.value, indep$p.value)) |> kable(digits = 4)
+```
+
+Como independientes, la variabilidad **entre hornos** entra al error estándar
+(`r round(indep$stderr / pareada$stderr)` veces mayor) y el sesgo queda oculto. El
+análisis correcto lo determina **cómo se tomaron los datos**.

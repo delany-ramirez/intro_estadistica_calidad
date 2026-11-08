@@ -1,0 +1,72 @@
+---
+title: "Pre-trabajo 2 — Pruebas para dos muestras y primera regresión"
+subtitle: "AS001 Análisis Estadístico"
+author: "NOMBRE APELLIDO"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
+library(tidyverse)
+library(knitr)
+theme_set(theme_minimal(base_size = 12))
+```
+
+```{r datos}
+pintura <- read_csv("datos/viscosidad-pintura.csv")
+kable(head(pintura))
+```
+
+# Cuestionario
+
+**1.** *Respuesta (i, ii, iii):*
+
+**2.** *Respuesta:*
+
+**3.** *Respuesta:*
+
+**4.** *Respuesta:*
+
+**5.** *Respuesta:*
+
+# Ejercicio en R
+
+## a) Comparación de lotes
+
+$H_0$: … $\qquad H_1$: …
+
+```{r a}
+
+```
+
+*Conclusión:*
+
+## b) Dispersión por lote
+
+```{r b}
+
+```
+
+*Observación:*
+
+## c) Correlación y regresión simple
+
+```{r c}
+
+```
+
+*Ecuación e interpretación:*
+
+## d) Predicción a 25 °C
+
+```{r d}
+
+```
+
+## e) Reflexión
+
+*Respuesta:*
