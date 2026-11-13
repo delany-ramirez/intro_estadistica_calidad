@@ -7,6 +7,7 @@
 
 | Lectura | Qué buscar |
 |---|---|
+| [`01-tutorial-r.md`](01-tutorial-r.md) + [`01-tutorial-r.Rmd`](01-tutorial-r.Rmd) | Pipe `\|>`, `group_by` + `summarise`, `count` y `ggplot2`: lo necesario para el ejercicio en R |
 | [`../sesion-1-variabilidad-inferencia/teoria/01-datos-variabilidad.md`](../sesion-1-variabilidad-inferencia/teoria/01-datos-variabilidad.md) | Diferencia entre réplica y repetición; qué es estratificar |
 | [`../sesion-1-variabilidad-inferencia/teoria/02-descriptiva-comparativa.md`](../sesion-1-variabilidad-inferencia/teoria/02-descriptiva-comparativa.md) | Medidas robustas; regla empírica; vallas de Tukey |
 | [`../sesion-1-variabilidad-inferencia/teoria/03-normalidad-tcl.md`](../sesion-1-variabilidad-inferencia/teoria/03-normalidad-tcl.md) §1–2 | Cálculo de probabilidades con la normal; lectura del Q-Q |

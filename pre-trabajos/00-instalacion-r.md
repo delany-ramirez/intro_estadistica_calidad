@@ -41,7 +41,8 @@ Debes ver el mensaje **"✔ Todos los paquetes están instalados"**. Instala `ti
 2. Pulsa el botón **Knit**.
 3. Debe abrirse un `.html` con una tabla de los primeros datos.
 
-Si ves el `.html`, ¡listo! Ya puedes resolver el diagnóstico y el pre-trabajo 1.
+Si ves el `.html`, ¡listo! Ya puedes resolver el diagnóstico. Antes del pre-trabajo 1,
+repasa el [tutorial de R](01-tutorial-r.md).
 
 ## Problemas frecuentes
 

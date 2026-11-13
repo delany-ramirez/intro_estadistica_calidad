@@ -20,6 +20,24 @@ message("Generando datasets...")
 # PRE-TRABAJOS
 # -----------------------------------------------------------------------------
 
+# PT0 · Tutorial de R: inspección de tapas plásticas inyectadas. Peso nominal
+# 12.0 g (±0.5 g); tres máquinas, dos turnos; registro de defecto visual.
+set.seed(100)
+n_tapas <- 90
+maquina <- rep(c("M1", "M2", "M3"), each = n_tapas / 3)
+turno_t <- rep(rep(c("dia", "noche"), each = 15), times = 3)
+peso_t <- 12 + ifelse(maquina == "M2", 0.15, 0) + ifelse(maquina == "M3", -0.10, 0) +
+  ifelse(turno_t == "noche", 0.05, 0) +
+  rnorm(n_tapas, 0, ifelse(maquina == "M3", 0.22, 0.12))
+p_def <- ifelse(maquina == "M3", 0.30, 0.12)
+defecto <- ifelse(runif(n_tapas) < p_def,
+                  sample(c("rebaba", "rechupe", "mancha"), n_tapas, replace = TRUE,
+                         prob = c(0.5, 0.3, 0.2)),
+                  "ninguno")
+guardar(data.frame(tapa = 1:n_tapas, maquina = maquina, turno = turno_t,
+                   peso_g = round(peso_t, 2), defecto = defecto),
+        "pre-trabajos/datos/tapas-inyeccion.csv")
+
 # PT1 · Diámetro de pernos (mm). Nominal 10.00 mm, tolerancia ±0.15 mm.
 set.seed(101)
 pernos <- data.frame(

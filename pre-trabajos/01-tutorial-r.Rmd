@@ -1,0 +1,442 @@
+---
+title: "01 · Tutorial de R para el curso"
+subtitle: "Pre-trabajos — AS001 Análisis Estadístico"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+## Objetivos
+
+- Declarar variables, vectores y reconocer tipos de dato.
+- Leer y explorar un `.csv`.
+- Usar el pipe `|>` con los verbos de `dplyr` para contar, resumir y **agrupar**.
+- Construir gráficos con `ggplot2` capa por capa.
+
+**Paquetes:** `tidyverse`, `knitr`, `patchwork`.
+
+> Teoría: [`01-tutorial-r.md`](01-tutorial-r.md). Los bloques **✍️ Tu turno** son para
+> resolver en clase; las respuestas sugeridas están al final.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4)
+```
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(patchwork)
+theme_set(theme_minimal(base_size = 12))
+```
+
+## 1. R como calculadora y declaración de variables
+
+```{r calculadora}
+2 + 3 * 4
+(2 + 3) * 4
+sqrt(16)
+10 / 3
+```
+
+Guardamos valores en **objetos** con `<-`. Estos son los parámetros del proceso que
+usaremos en todo el tutorial:
+
+```{r variables}
+nominal <- 12        # peso nominal de la tapa (g)
+tolerancia <- 0.5
+LIE <- nominal - tolerancia
+LSE <- nominal + tolerancia
+proceso <- "inyección de tapas"
+
+LIE
+LSE
+class(nominal)
+class(proceso)
+```
+
+### Vectores
+
+```{r vectores}
+pesos <- c(12.10, 11.92, 12.31, 11.45, 12.03, 12.58)
+length(pesos)
+pesos[2]          # segundo elemento
+pesos[c(1, 3)]    # primero y tercero
+pesos - nominal   # desvío de cada uno (elemento a elemento)
+```
+
+Comparar produce un vector **lógico**, y `TRUE` vale 1: así se cuenta y se calcula la
+proporción.
+
+```{r logicos}
+fuera <- pesos < LIE | pesos > LSE
+fuera
+sum(fuera)    # cuántas fuera de especificación
+mean(fuera)   # proporción fuera
+pesos[fuera]  # cuáles
+```
+
+### Funciones y faltantes
+
+```{r funciones}
+mean(pesos)
+sd(pesos)
+round(sd(pesos), 3)
+
+con_faltante <- c(pesos, NA)
+mean(con_faltante)
+mean(con_faltante, na.rm = TRUE)
+```
+
+> **✍️ Tu turno 1.** Crea un vector `tiempos` con los valores 4.2, 5.1, 3.8, 6.0 y 4.9
+> (minutos). Calcula su media, su desviación estándar y cuántos superan 5 minutos.
+
+```{r turno-1}
+
+```
+
+## 2. Leer y explorar los datos
+
+```{r leer}
+tapas <- read_csv("datos/tapas-inyeccion.csv")
+tapas
+```
+
+```{r explorar}
+glimpse(tapas)
+nrow(tapas)
+names(tapas)
+summary(tapas)
+```
+
+Con `$` se extrae una columna como vector:
+
+```{r dolar}
+tapas$peso_g |> head()
+mean(tapas$peso_g)
+```
+
+## 3. El pipe `|>`
+
+Las dos líneas siguientes hacen lo mismo. La segunda se lee de izquierda a derecha:
+*toma los pesos, y luego calcula la media, y luego redondea*.
+
+```{r pipe}
+round(mean(tapas$peso_g), 3)
+tapas$peso_g |> mean() |> round(3)
+```
+
+## 4. Verbos de `dplyr`
+
+### `filter`: elegir filas
+
+```{r filter}
+tapas |> filter(maquina == "M3")
+tapas |> filter(maquina == "M3", turno == "noche")          # coma = "y"
+tapas |> filter(peso_g < LIE | peso_g > LSE)                # "o"
+tapas |> filter(defecto %in% c("rebaba", "rechupe"))
+```
+
+### `select` y `arrange`: elegir columnas y ordenar
+
+```{r select-arrange}
+tapas |> select(maquina, peso_g) |> head(3)
+tapas |> select(-tapa) |> head(3)
+tapas |> arrange(peso_g) |> head(3)          # los más livianos
+tapas |> arrange(desc(peso_g)) |> head(3)    # los más pesados
+```
+
+### `mutate`: crear variables
+
+Aquí sí **reasignamos** (`tapas <- ...`) para que las columnas nuevas queden guardadas.
+
+```{r mutate}
+tapas <- tapas |>
+  mutate(
+    desvio_g   = peso_g - nominal,
+    conforme   = peso_g >= LIE & peso_g <= LSE,
+    defectuosa = defecto != "ninguno",
+    clase_peso = case_when(
+      peso_g < LIE ~ "bajo",
+      peso_g > LSE ~ "alto",
+      .default = "ok"
+    )
+  )
+tapas |> select(tapa, maquina, peso_g, desvio_g, conforme, defectuosa, clase_peso) |> head()
+```
+
+> **✍️ Tu turno 2.** Muestra solo las tapas del turno de noche de la máquina M2 con
+> peso mayor a 12.2 g, ordenadas de mayor a menor peso, con las columnas `tapa`,
+> `peso_g` y `defecto`.
+
+```{r turno-2}
+
+```
+
+## 5. Conteos y proporciones
+
+```{r count}
+tapas |> count(maquina)
+tapas |> count(defecto, sort = TRUE)
+tapas |> count(maquina, turno)
+```
+
+Proporción de tapas defectuosas **dentro de cada máquina**:
+
+```{r proporciones}
+tapas |>
+  count(maquina, defectuosa) |>
+  group_by(maquina) |>
+  mutate(prop = n / sum(n)) |>
+  filter(defectuosa) |>
+  kable(digits = 3)
+```
+
+La misma información, como tabla de doble entrada:
+
+```{r tabla-cruzada}
+table(tapas$maquina, tapas$defecto)
+
+tapas |>
+  count(maquina, defecto) |>
+  pivot_wider(names_from = defecto, values_from = n, values_fill = 0) |>
+  kable()
+```
+
+## 6. Resúmenes numéricos
+
+### Globales
+
+```{r resumen-global}
+tapas |>
+  summarise(n = n(), media = mean(peso_g), mediana = median(peso_g),
+            s = sd(peso_g), varianza = var(peso_g), RIC = IQR(peso_g),
+            Q1 = quantile(peso_g, 0.25), Q3 = quantile(peso_g, 0.75),
+            min = min(peso_g), max = max(peso_g),
+            fuera_espec = sum(!conforme)) |>
+  kable(digits = 3)
+```
+
+### Por grupo: `group_by` + `summarise`
+
+```{r resumen-maquina}
+resumen <- tapas |>
+  group_by(maquina) |>
+  summarise(n = n(), media = mean(peso_g), s = sd(peso_g),
+            CV_pct = 100 * s / media,
+            pct_defectuosas = 100 * mean(defectuosa))
+kable(resumen, digits = 3)
+```
+
+Por **dos** factores; `.groups = "drop"` deja la tabla desagrupada:
+
+```{r resumen-dos}
+tapas |>
+  group_by(maquina, turno) |>
+  summarise(n = n(), media = mean(peso_g), s = sd(peso_g), .groups = "drop") |>
+  kable(digits = 3)
+```
+
+### `group_by` + `mutate`: calcular por grupo sin colapsar filas
+
+El puntaje $z$ de cada tapa respecto a **su propia máquina**:
+
+```{r z-grupo}
+tapas <- tapas |>
+  group_by(maquina) |>
+  mutate(z = (peso_g - mean(peso_g)) / sd(peso_g)) |>
+  ungroup()
+
+tapas |> filter(abs(z) > 2) |> select(tapa, maquina, peso_g, z) |> kable(digits = 2)
+```
+
+### `across`: la misma función a varias columnas
+
+```{r across}
+tapas |>
+  group_by(maquina) |>
+  summarise(across(c(peso_g, desvio_g), list(media = mean, s = sd))) |>
+  kable(digits = 3)
+```
+
+### Cifras en el texto
+
+La máquina con mayor dispersión es
+**`r resumen$maquina[which.max(resumen$s)]`**, con $s =$
+`r round(max(resumen$s), 3)` g. En total hay `r sum(!tapas$conforme)` tapas fuera de
+especificación. (Estas cifras las escribe R al compilar.)
+
+> **✍️ Tu turno 3.** Por **turno**, calcula $n$, media, mediana, desviación estándar y el
+> porcentaje de tapas conformes. ¿Qué turno es más pesado en promedio?
+
+```{r turno-3}
+
+```
+
+## 7. Gráficos con `ggplot2`, capa por capa
+
+### Paso a paso
+
+```{r capas-1}
+ggplot(tapas, aes(x = peso_g))               # 1. datos + estética: lienzo vacío
+```
+
+```{r capas-2}
+ggplot(tapas, aes(x = peso_g)) +
+  geom_histogram(binwidth = 0.1)             # 2. geometría
+```
+
+```{r capas-3}
+ggplot(tapas, aes(x = peso_g)) +
+  geom_histogram(binwidth = 0.1, fill = "steelblue", colour = "white") +   # 3. aspecto fijo
+  geom_vline(xintercept = c(LIE, nominal, LSE), linetype = c(2, 1, 2)) + # 4. referencias
+  labs(title = "Peso de tapas", x = "Peso (g)", y = "Frecuencia")         # 5. etiquetas
+```
+
+### Dentro vs. fuera de `aes()`
+
+```{r aes-dentro-fuera, fig.height = 3.5}
+g_fuera  <- ggplot(tapas, aes(peso_g)) +
+  geom_histogram(binwidth = 0.1, fill = "darkorange") +
+  labs(title = 'fill = "darkorange" (fijo)')
+g_dentro <- ggplot(tapas, aes(peso_g, fill = maquina)) +
+  geom_histogram(binwidth = 0.1) +
+  labs(title = "aes(fill = maquina) (variable)")
+g_fuera + g_dentro
+```
+
+### Comparar grupos: cajas, puntos y facetas
+
+```{r cajas}
+ggplot(tapas, aes(maquina, peso_g, fill = maquina)) +
+  geom_boxplot(show.legend = FALSE, outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.5, show.legend = FALSE) +
+  geom_hline(yintercept = c(LIE, LSE), linetype = 2, colour = "red") +
+  labs(title = "Peso por máquina", x = "Máquina", y = "Peso (g)")
+```
+
+```{r facetas}
+ggplot(tapas, aes(maquina, peso_g, fill = turno)) +
+  geom_boxplot() +
+  labs(title = "Peso por máquina y turno", x = "Máquina", y = "Peso (g)", fill = "Turno")
+
+ggplot(tapas, aes(peso_g, fill = maquina)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ turno, ncol = 1) +
+  labs(title = "Densidad del peso, un panel por turno", x = "Peso (g)", y = NULL)
+```
+
+### Barras: conteos
+
+`geom_bar()` cuenta solo; `geom_col()` usa alturas ya calculadas.
+
+```{r barras}
+b1 <- ggplot(tapas, aes(maquina, fill = defecto)) +
+  geom_bar() +
+  labs(title = "geom_bar(): cuenta filas", x = "Máquina", y = "Tapas")
+
+b2 <- tapas |>
+  filter(defectuosa) |>
+  count(defecto, sort = TRUE) |>
+  ggplot(aes(reorder(defecto, -n), n)) +
+  geom_col(fill = "steelblue") +
+  labs(title = "geom_col(): Pareto de defectos", x = NULL, y = "Tapas")
+
+b1 + b2
+```
+
+Observa cómo el pipe prepara los datos **antes** de `ggplot()`, y desde ahí las capas se
+unen con `+`.
+
+### Serie en orden de producción
+
+```{r serie}
+ggplot(tapas, aes(tapa, peso_g, colour = maquina)) +
+  geom_line() + geom_point() +
+  geom_hline(yintercept = c(LIE, nominal, LSE), linetype = c(2, 1, 2)) +
+  labs(title = "Peso en orden de producción", x = "Tapa", y = "Peso (g)", colour = "Máquina")
+```
+
+### Normalidad: gráfico Q-Q
+
+```{r qq}
+ggplot(tapas, aes(sample = peso_g)) +
+  geom_qq() + geom_qq_line(colour = "red") +
+  facet_wrap(~ maquina) +
+  labs(title = "Q-Q normal por máquina", x = "Cuantil teórico", y = "Peso (g)")
+```
+
+### Dispersión y recta de regresión
+
+Usamos los datos del pre-trabajo 2 solo para mostrar el gráfico:
+
+```{r dispersion}
+pintura <- read_csv("datos/viscosidad-pintura.csv")
+ggplot(pintura, aes(temperatura_c, viscosidad_cp, colour = lote)) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Temperatura (°C)", y = "Viscosidad (cP)", colour = "Lote")
+```
+
+### Combinar con `patchwork` y una media por grupo
+
+```{r patchwork, fig.height = 6}
+p1 <- ggplot(tapas, aes(peso_g)) +
+  geom_histogram(binwidth = 0.1, fill = "steelblue", colour = "white") +
+  labs(title = "Histograma", x = "Peso (g)")
+p2 <- ggplot(tapas, aes(sample = peso_g)) +
+  geom_qq() + geom_qq_line() + labs(title = "Q-Q")
+p3 <- ggplot(tapas, aes(maquina, peso_g)) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  labs(title = "Media ± error estándar", x = "Máquina", y = "Peso (g)")
+(p1 + p2) / p3
+```
+
+> **✍️ Tu turno 4.** Haz un histograma del peso con un panel por máquina
+> (`facet_wrap`), relleno por turno y las líneas de especificación. Pon título y nombres
+> de ejes con unidades.
+
+```{r turno-4}
+
+```
+
+## 8. Conclusiones del caso
+
+- **M2** está descentrada hacia arriba y **M3** hacia abajo; **M1** está centrada.
+- **M3** tiene la mayor dispersión y la mayor proporción de defectos visuales: es la
+  primera candidata a revisión.
+- El turno de noche pesa un poco más en las tres máquinas, pero la diferencia es pequeña
+  frente a la diferencia entre máquinas.
+
+Todo esto se obtuvo con cuatro herramientas: `read_csv`, `|>`, `group_by` + `summarise`
+y `ggplot`. Son las que usaremos en todos los notebooks del curso.
+
+## Respuestas sugeridas a "Tu turno"
+
+```{r respuestas, eval = FALSE}
+# Tu turno 1
+tiempos <- c(4.2, 5.1, 3.8, 6.0, 4.9)
+mean(tiempos); sd(tiempos); sum(tiempos > 5)
+
+# Tu turno 2
+tapas |>
+  filter(turno == "noche", maquina == "M2", peso_g > 12.2) |>
+  arrange(desc(peso_g)) |>
+  select(tapa, peso_g, defecto)
+
+# Tu turno 3
+tapas |>
+  group_by(turno) |>
+  summarise(n = n(), media = mean(peso_g), mediana = median(peso_g),
+            s = sd(peso_g), pct_conformes = 100 * mean(conforme))
+
+# Tu turno 4
+ggplot(tapas, aes(peso_g, fill = turno)) +
+  geom_histogram(binwidth = 0.1, colour = "white") +
+  geom_vline(xintercept = c(LIE, LSE), linetype = 2) +
+  facet_wrap(~ maquina, ncol = 1) +
+  labs(title = "Peso por máquina y turno", x = "Peso (g)", y = "Frecuencia", fill = "Turno")
+```

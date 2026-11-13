@@ -37,7 +37,7 @@ Cada sesión sigue la misma estructura: `teoria/` · `notebooks/` · `datos/` ·
 intro_estadistica_calidad/
 ├── docs/convenciones.md                  # estilo .md/LaTeX y .Rmd
 ├── install.R                             # instala los paquetes de R del curso
-├── pre-trabajos/                         # diagnóstico, pre-trabajos 1 y 2, instalación
+├── pre-trabajos/                         # diagnóstico, instalación, tutorial de R, pre-trabajos 1 y 2
 ├── sesion-1-variabilidad-inferencia/
 │   ├── teoria/   notebooks/   datos/   ejercicios/
 ├── sesion-2-inferencia-regresion/        (misma sub-estructura)
@@ -63,6 +63,7 @@ intro_estadistica_calidad/
    Los datos se leen con rutas relativas desde `../datos/`.
 
 Guía detallada para estudiantes: [`pre-trabajos/00-instalacion-r.md`](pre-trabajos/00-instalacion-r.md).
+Tutorial de R (pipe, `dplyr`, `ggplot2`): [`pre-trabajos/01-tutorial-r.md`](pre-trabajos/01-tutorial-r.md).
 
 ## 🎞️ Diapositivas
 
