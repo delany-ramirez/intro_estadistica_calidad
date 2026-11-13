@@ -13,7 +13,7 @@ con datos en R.
 
 | Actividad | Cierre | Formativo (sin nota) | Calificable |
 |-----------|--------|----------------------|-------------|
-| Instalación de R | Antes del diagnóstico | [`00-instalacion-r.md`](00-instalacion-r.md) | — |
+| Instalación de R (o Posit Cloud) | Antes del diagnóstico | [`00-instalacion-r.md`](00-instalacion-r.md) | — |
 | Tutorial de R | Antes del pre-trabajo 1 | [`01-tutorial-r.md`](01-tutorial-r.md) + [`01-tutorial-r.Rmd`](01-tutorial-r.Rmd) | — |
 | Diagnóstico de entrada | Miércoles anterior a la Sesión 1, 23:59 | [`diagnostico-entrada.md`](diagnostico-entrada.md) | 0 % |
 | **Pre-trabajo 1** | Miércoles anterior a la Sesión 1, 23:59 | Lecturas dirigidas | Cuestionario + ejercicio en R · **15 %** |

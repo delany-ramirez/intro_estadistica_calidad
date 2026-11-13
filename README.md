@@ -53,6 +53,7 @@ intro_estadistica_calidad/
 
 1. Instala [R](https://cran.r-project.org/) (≥ 4.2) y
    [RStudio](https://posit.co/download/rstudio-desktop/) o VS Code con la extensión de R.
+   Si no quieres instalar nada, usa [Posit Cloud](https://posit.cloud/) desde el navegador.
 2. Abre la carpeta del repositorio como proyecto y ejecuta una sola vez:
 
    ```r
