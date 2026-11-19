@@ -1,0 +1,1461 @@
+---
+title: "Inferencia estadística para la calidad"
+subtitle: "Sesión 2 — Versión intensiva en 5 bloques: de la muestra a la decisión"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    self_contained: true
+    code_folding: show
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4, fig.align = "center")
+```
+
+# Presentación {.unnumbered}
+
+## Objetivos {.unnumbered}
+
+Al terminar los cinco bloques podrás:
+
+1.  Explicar qué es una **distribución muestral**, qué asegura el
+    **Teorema Central del Límite** (TCL) y verificar el supuesto de
+    **normalidad**.
+2.  Construir e interpretar **intervalos de confianza** (IC) para una
+    media y una desviación estándar.
+3.  Plantear y resolver **pruebas de hipótesis**, interpretando valor p,
+    errores tipo I y II y potencia.
+4.  **Elegir** la prueba correcta para comparar dos procesos
+    (independientes, pareados, varianzas).
+5.  **Leer e interpretar** las salidas de R de las pruebas de hipótesis
+    (medias, varianzas y proporciones) y planear el **tamaño de
+    muestra**.
+
+**RAA2 · RAA3**
+
+## Agenda sugerida {.unnumbered}
+
+| Bloque | Hora | Tema | Caso de calidad |
+|:-----------------:|:-----------------:|-----------------|-----------------|
+| 1 | 8:00–9:00 | De la muestra a la población: normalidad, TCL, distribuciones $t$, $\chi^2$, $F$ | Tiempo de atención · bolsas de azúcar |
+| 2 | 9:00–10:00 | Intervalos de confianza | Espesor de recubrimiento |
+| 3 | 10:00–11:00 | Prueba de hipótesis para una muestra | Humedad del café |
+| 4 | 11:00–12:00 | Comparación de dos poblaciones | Líneas de ensamble · durómetros |
+| 5 | 12:00–13:00 | Pruebas de hipótesis en la práctica: ejemplos, lectura de salidas y potencia | Llenado · tapas · pernos |
+| — | 13:00–14:00 | Evaluación individual | — |
+
+Cada bloque tiene la misma estructura (≈ 20 min de teoría, 25 min de
+demostración en R, 10 min de **✍️ Tu turno**, 5 min de pausa) y termina
+con las **ideas clave**.
+
+## Paquetes y datos {.unnumbered}
+
+**Paquetes:** `tidyverse`, `knitr`, `nortest`, `car`, `pwr`, `patchwork`
+(todos en [`install.R`](../../install.R)). Los datos se leen de las
+carpetas `datos/` de las sesiones 1 y 2 con rutas relativas.
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(nortest)    # ad.test (Anderson-Darling)
+library(car)        # leveneTest
+library(pwr)        # potencia con tamaño del efecto
+library(patchwork)  # combinar gráficos
+theme_set(theme_minimal(base_size = 12))
+set.seed(2026)
+
+datos_s1 <- "../../sesion-1-variabilidad-inferencia/datos/"
+datos_s2 <- "../datos/"
+leer <- function(carpeta, archivo) read_csv(paste0(carpeta, archivo), show_col_types = FALSE)
+```
+
+------------------------------------------------------------------------
+
+# Bloque 1 · De la muestra a la población
+
+> **Pregunta del bloque.** Si solo mido 25 piezas, ¿qué puedo decir de
+> *todas* las piezas del proceso? ¿Y qué tan confiable es un promedio?
+
+## Población, muestra, parámetro y estadístico
+
+| Concepto | Qué es | Notación | Ejemplo |
+|------------------|------------------|------------------|------------------|
+| **Población** | Todas las unidades que produce (o producirá) el proceso | — | Todas las bolsas de azúcar del turno |
+| **Muestra** | Las unidades que realmente medimos | $y_1,\dots,y_n$ | 50 bolsas pesadas |
+| **Parámetro** | Característica fija y **desconocida** de la población | $\mu$, $\sigma$ | Peso medio real del proceso |
+| **Estadístico** | Número calculado con la muestra; **varía** de muestra a muestra | $\bar{y}$, $s$ | Peso medio de las 50 bolsas |
+
+La **inferencia estadística** usa estadísticos para decir algo sobre los
+parámetros, **cuantificando la incertidumbre**. Hay dos herramientas:
+**estimar** (intervalos de confianza, bloque 2) y **decidir** (pruebas
+de hipótesis, bloques 3–5).
+
+## Distribución muestral y error estándar
+
+Si tomáramos muchas muestras de tamaño $n$, cada una daría un $\bar{y}$
+distinto. La distribución de esos valores es la **distribución muestral
+de la media**, con
+
+$$
+E(\bar{y}) = \mu, \qquad \text{EE}(\bar{y}) = \frac{\sigma}{\sqrt{n}} .
+$$
+
+El **error estándar** (EE) mide cuánto varía la media de muestra en
+muestra: **no** es la variabilidad de las piezas ($\sigma$) sino la de
+**su promedio**. Para reducir el EE a la mitad hay que **cuadruplicar**
+$n$.
+
+## Teorema Central del Límite (TCL)
+
+Si $y_1,\dots,y_n$ son independientes, con media $\mu$ y varianza finita
+$\sigma^2$, entonces, para $n$ suficientemente grande,
+
+$$
+\bar{y} \;\dot\sim\; N\!\left(\mu,\ \frac{\sigma^2}{n}\right)
+\qquad\Longleftrightarrow\qquad
+Z = \frac{\bar{y}-\mu}{\sigma/\sqrt{n}} \;\dot\sim\; N(0,1).
+$$
+
+### Demostración: el TCL con una población asimétrica
+
+Los tiempos de atención de un centro de servicio son claramente
+**asimétricos**. Los tomamos como si fueran la población y extraemos
+3000 muestras de cada tamaño $n$.
+
+```{r tcl-datos}
+atencion <- leer(datos_s1, "tiempo-atencion.csv")
+poblacion <- atencion$tiempo_min
+c(mu = mean(poblacion), sigma = sd(poblacion)) |> round(2)
+```
+
+```{r tcl-sim, fig.height = 5.5}
+medias <- map_dfr(c(1, 2, 5, 30), function(n) {
+  tibble(n = n, media = replicate(3000, mean(sample(poblacion, n, replace = TRUE))))
+})
+ggplot(medias, aes(media)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40,
+                 fill = "steelblue", colour = "white") +
+  facet_wrap(~ n, scales = "free", labeller = label_both) +
+  labs(title = "Distribución de la media muestral según n",
+       subtitle = "n = 1 es la población original (asimétrica)",
+       x = "Media de la muestra (min)", y = "Densidad")
+```
+
+```{r tcl-tabla}
+medias |>
+  group_by(n) |>
+  summarise(media_de_medias = mean(media),
+            EE_simulado = sd(media),
+            EE_teorico = sd(poblacion) / sqrt(first(n))) #|>
+  # kable(digits = 3, caption = "El error estándar simulado coincide con σ/√n")
+```
+
+-   La media de las medias ≈ $\mu$: $\bar{y}$ es un estimador
+    **insesgado**.
+-   Su dispersión baja como $\sigma/\sqrt{n}$.
+-   La **forma** se vuelve normal al crecer $n$, aunque la población no
+    lo sea.
+
+### Qué asegura y qué no
+
+| ✅ El TCL **sí** asegura | ❌ El TCL **no** asegura |
+|------------------------------------|------------------------------------|
+| Que la **media muestral** es aproximadamente normal con $n$ grande | Que los **datos individuales** sean normales |
+| Que el EE disminuye como $1/\sqrt{n}$ | Que $n = 30$ baste siempre (depende de la asimetría) |
+| Robustez de IC y pruebas **para la media** | Robustez de IC y pruebas **para la varianza** ($\chi^2$, $F$) |
+|  | Que la fracción fuera de especificación pueda calcularse con la normal |
+|  | Nada si los datos **no son independientes** |
+
+## ¿Son normales mis datos?
+
+Muchas técnicas (IC para $\sigma$, prueba $F$, pruebas $t$ con $n$
+pequeño) **suponen normalidad**. Se verifica con dos herramientas
+complementarias.
+
+**1. Gráfico de probabilidad normal (Q-Q).** Cuantiles de la muestra
+contra cuantiles teóricos de la normal: si los datos son normales, los
+puntos caen **cerca de una recta**.
+
+| Patrón en el Q-Q | Diagnóstico |
+|----|----|
+| Puntos sobre la recta | Compatible con normalidad |
+| Curva en forma de **U** o **J** | Asimetría |
+| Forma de **S** | Colas más livianas o más pesadas que la normal |
+| Escalón en el centro | **Mezcla** de poblaciones (estratificar) |
+| Puntos aislados en un extremo | Atípicos |
+
+**2. Pruebas formales.** $H_0$: los datos provienen de una normal ·
+$H_1$: no. Shapiro-Wilk (`shapiro.test`, la más potente) y
+Anderson-Darling (`nortest::ad.test`, sensible en las colas).
+
+> ⚠️ Con $n$ pequeño las pruebas casi nunca rechazan (poca potencia);
+> con $n$ muy grande rechazan por desviaciones sin importancia práctica.
+> **Usa siempre el Q-Q junto con la prueba.**
+
+### Demostración: bolsas de azúcar vs. tiempos de atención
+
+```{r normalidad-datos}
+bolsas <- leer(datos_s1, "peso-bolsas-azucar.csv")
+
+qq <- function(df, var, titulo) {
+  ggplot(df, aes(sample = {{ var }})) + geom_qq() + geom_qq_line(colour = "red") +
+    labs(title = titulo, x = "Cuantil teórico N(0,1)", y = "Cuantil muestral")
+}
+qq(bolsas, peso_g, "Peso de bolsas (g)") + qq(atencion, tiempo_min, "Tiempo de atención (min)")
+```
+
+```{r normalidad-pruebas}
+pruebas_normalidad <- function(y) {
+  c(n = length(y), Shapiro_p = shapiro.test(y)$p.value, AD_p = ad.test(y)$p.value)
+}
+rbind(`Peso de bolsas` = pruebas_normalidad(bolsas$peso_g),
+      `Tiempo de atención` = pruebas_normalidad(atencion$tiempo_min)) |>
+  kable(digits = 4, caption = "Valores p de las pruebas de normalidad")
+```
+
+-   **Bolsas:** puntos sobre la recta y valores p grandes → compatible
+    con normalidad.
+-   **Atención:** forma de **J** y valores p ≈ 0 → asimétrica. Para
+    inferir sobre la **media** el TCL nos respalda (n =
+    `r nrow(atencion)`); para calcular la fracción de clientes que
+    esperan más de 20 min, **no**.
+
+## Tres distribuciones muestrales: $t$, $\chi^2$ y $F$
+
+En la práctica $\sigma$ es desconocida y se reemplaza por $s$. Si los
+datos son normales:
+
+| Estadístico | Distribución | Se usa para | En R |
+|------------------|------------------|------------------|------------------|
+| $T=\dfrac{\bar{y}-\mu}{s/\sqrt{n}}$ | $t_{n-1}$ | Una media | `qt`, `pt` |
+| $X^2=\dfrac{(n-1)s^2}{\sigma^2}$ | $\chi^2_{n-1}$ | Una varianza | `qchisq`, `pchisq` |
+| $F=\dfrac{s_1^2/\sigma_1^2}{s_2^2/\sigma_2^2}$ | $F_{n_1-1,\,n_2-1}$ | Razón de dos varianzas (y ANOVA) | `qf`, `pf` |
+
+Los **grados de libertad** (gl) indican cuánta información hay para
+estimar $\sigma$.
+
+```{r distribuciones, fig.height = 3.2, fig.width = 10}
+x <- seq(-4, 4, length.out = 400)
+p_t <- bind_rows(
+  tibble(x, d = dnorm(x), dist = "N(0,1)"),
+  tibble(x, d = dt(x, 3), dist = "t, 3 gl"),
+  tibble(x, d = dt(x, 24), dist = "t, 24 gl")) |>
+  ggplot(aes(x, d, colour = dist)) + geom_line(linewidth = 1) +
+  labs(title = "t: simétrica, colas pesadas", x = NULL, y = "densidad", colour = NULL) +
+  theme(legend.position = "bottom")
+x2 <- seq(0.01, 45, length.out = 400)
+p_chi <- tibble(x = x2, `5 gl` = dchisq(x2, 5), `24 gl` = dchisq(x2, 24)) |>
+  pivot_longer(-x, names_to = "gl", values_to = "d") |>
+  ggplot(aes(x, d, colour = gl)) + geom_line(linewidth = 1) +
+  labs(title = "χ²: asimétrica, positiva", x = NULL, y = NULL, colour = NULL) +
+  theme(legend.position = "bottom")
+xf <- seq(0.01, 4, length.out = 400)
+p_f <- tibble(x = xf, `F(4, 10)` = df(xf, 4, 10), `F(14, 17)` = df(xf, 14, 17)) |>
+  pivot_longer(-x, names_to = "gl", values_to = "d") |>
+  ggplot(aes(x, d, colour = gl)) + geom_line(linewidth = 1) +
+  labs(title = "F: asimétrica, positiva", x = NULL, y = NULL, colour = NULL) +
+  theme(legend.position = "bottom")
+p_t + p_chi + p_f
+```
+
+**R reemplaza la tabla.** `q*()` da el valor crítico (cuantil) y `p*()`
+el área (probabilidad):
+
+```{r cuantiles}
+tibble(
+  `Valor crítico` = c("z (0.025)", "t (0.025; 24 gl)", "t (0.025; 4 gl)",
+                      "χ² superior (0.025; 24 gl)", "χ² inferior (0.975; 24 gl)",
+                      "F (0.025; 14, 17 gl)"),
+  `Código R` = c("qnorm(0.975)", "qt(0.975, 24)", "qt(0.975, 4)",
+                 "qchisq(0.975, 24)", "qchisq(0.025, 24)", "qf(0.975, 14, 17)"),
+  valor = c(qnorm(0.975), qt(0.975, 24), qt(0.975, 4),
+            qchisq(0.975, 24), qchisq(0.025, 24), qf(0.975, 14, 17))
+) |> kable(digits = 3)
+```
+
+Con pocos gl, el valor crítico de la $t$ es mayor que 1.96: la
+incertidumbre por estimar $\sigma$ **ensancha** los intervalos.
+
+## ✍️ Tu turno {.unnumbered}
+
+1.  Si $\sigma = 6$ min, ¿cuál es el error estándar de la media con
+    $n = 36$? ¿Y con $n = 144$?
+2.  Verifica la normalidad del contenido de grasa de 16 muestras de
+    leche (`grasa-leche.csv`, variable `grasa_pct`) con un Q-Q y
+    Shapiro-Wilk.
+
+```{r turno-1, eval = FALSE}
+grasa <- leer(datos_s1, "grasa-leche.csv")
+# tu código aquí
+```
+
+<details>
+
+<summary>Ver solución</summary>
+
+```{r turno-1-sol}
+c(EE_n36 = 6 / sqrt(36), EE_n144 = 6 / sqrt(144))   # 4 veces n -> la mitad del EE
+grasa <- leer(datos_s1, "grasa-leche.csv")
+qq(grasa, grasa_pct, "Grasa de la leche (%)")
+shapiro.test(grasa$grasa_pct)
+```
+
+</details>
+
+## Ideas clave del bloque 1 {.unnumbered}
+
+-   Un estadístico **varía** de muestra en muestra; el **error
+    estándar** mide esa variación.
+-   El TCL hace que la **media** sea aproximadamente normal; no los
+    datos individuales.
+-   Normalidad: **Q-Q primero**, prueba formal después.
+-   $t$ (medias), $\chi^2$ (una varianza) y $F$ (dos varianzas, ANOVA)
+    son la base de todo lo que sigue; en R se obtienen con `qt`,
+    `qchisq`, `qf`.
+
+------------------------------------------------------------------------
+
+# Bloque 2 · Intervalos de confianza
+
+> **Pregunta del bloque.** El espesor promedio de 25 piezas fue 51.3 µm.
+> ¿Entre qué valores está, *razonablemente*, el espesor promedio del
+> proceso?
+
+## Estimación puntual y por intervalo
+
+Un estimador puntual ($\bar{y}$, $s$) da un solo número que casi seguro
+**no** es igual al parámetro. Un **intervalo de confianza** del
+$100(1-\alpha)\,\%$ da un rango de valores plausibles y expresa la
+**precisión** de la estimación. Todos los IC de este curso tienen la
+misma estructura:
+
+$$
+\text{estimador} \;\pm\; \underbrace{\text{valor crítico}}_{\text{confianza}} \times
+\underbrace{\text{error estándar}}_{\text{variabilidad y } n}
+$$
+
+> **Interpretación correcta.** Si se repitiera el muestreo muchas veces,
+> el $100(1-\alpha)\,\%$ de los intervalos así construidos contendría el
+> verdadero parámetro. Un intervalo ya calculado lo contiene o no: la
+> "confianza" es del **procedimiento**, no de un intervalo particular.
+
+## IC para la media y para la desviación estándar
+
+**Media** ($\sigma$ desconocida, datos normales o $n$ moderado):
+
+$$
+\bar{y} \pm t_{\alpha/2,\,n-1}\,\frac{s}{\sqrt{n}}
+$$
+
+**Varianza** (requiere normalidad **estricta**; para $\sigma$ se saca
+raíz a los extremos):
+
+$$
+\frac{(n-1)s^2}{\chi^2_{\alpha/2,\,n-1}} \;\le\; \sigma^2 \;\le\;
+\frac{(n-1)s^2}{\chi^2_{1-\alpha/2,\,n-1}}
+$$
+
+> $t_{\alpha/2,\nu}$ y $\chi^2_{\alpha/2,\nu}$ dejan un área $\alpha/2$
+> **a la derecha** (en R: `qt(1 - alpha/2, nu)`,
+> `qchisq(1 - alpha/2, nu)`). El IC para $\sigma^2$ **no es simétrico**
+> porque la $\chi^2$ no lo es.
+
+### Demostración: espesor de recubrimiento
+
+Objetivo del proceso: **50 µm**. Requisito de uniformidad:
+$\sigma \le 2.5$ µm.
+
+```{r espesor}
+espesor <- leer(datos_s1, "espesor-recubrimiento.csv")$espesor_um
+n <- length(espesor); ybar <- mean(espesor); s <- sd(espesor)
+c(n = n, media = ybar, s = s) |> round(3)
+```
+
+```{r espesor-graf, fig.height = 3}
+ggplot(tibble(espesor), aes(espesor)) +
+  geom_dotplot(binwidth = 0.4, fill = "steelblue") +
+  geom_vline(xintercept = 50, colour = "red", linetype = 2) +
+  annotate("text", x = 50, y = 0.95, label = "objetivo", colour = "red", hjust = -0.1) +
+  scale_y_continuous(NULL, breaks = NULL) + labs(x = "Espesor (µm)")
+```
+
+**IC del 95 % para** $\mu$, paso a paso:
+
+```{r ic-media}
+alpha <- 0.05
+t_crit <- qt(1 - alpha / 2, n - 1)
+EE <- s / sqrt(n)
+c(t_critico = t_crit, 
+  EE = EE, 
+  semiancho = t_crit * EE,
+  inferior = ybar - t_crit * EE, 
+  superior = ybar + t_crit * EE) |> round(3)
+
+t.test(espesor)$conf.int   # lo mismo en una línea
+```
+
+**IC del 95 % para** $\sigma$:
+
+```{r ic-sigma}
+ic_var <- (n - 1) * s^2 / qchisq(c(1 - alpha / 2, alpha / 2), n - 1)
+
+c(sigma_inf = sqrt(ic_var[1]), 
+  s = s, 
+  sigma_sup = sqrt(ic_var[2])) |> round(3)
+```
+
+**Lectura en el lenguaje del proceso:**
+
+-   El IC para la media, [`r round(ybar - t_crit * EE, 2)`,
+    `r round(ybar + t_crit * EE, 2)`] µm, **no contiene 50 µm**: el
+    proceso está centrado **por encima** del objetivo (se gasta
+    recubrimiento de más).
+-   El IC para $\sigma$ queda completamente **por debajo de 2.5 µm**: la
+    uniformidad es adecuada. Conviene **recentrar**, no reducir
+    variabilidad.
+
+## ¿Qué significa "95 % de confianza"? (simulación)
+
+Simulamos un proceso con $\mu = 50$ y $\sigma = 2$ conocidos, tomamos
+100 muestras de 25 piezas y calculamos un IC con cada una.
+
+```{r cobertura, fig.height = 6}
+mu_real <- 50; sigma_real <- 2
+ics <- map_dfr(1:100, function(i) {
+  ic <- t.test(rnorm(25, mu_real, sigma_real))$conf.int
+  tibble(muestra = i, inf = ic[1], sup = ic[2],
+         contiene = inf <= mu_real & sup >= mu_real)
+})
+ggplot(ics, aes(y = muestra, xmin = inf, xmax = sup, colour = contiene)) +
+  geom_linerange(linewidth = 0.8) + geom_vline(xintercept = mu_real) +
+  scale_colour_manual(values = c(`TRUE` = "grey50", `FALSE` = "red"),
+                      labels = c(`TRUE` = "Contiene μ", `FALSE` = "No contiene μ")) +
+  labs(title = sprintf("%d de 100 intervalos contienen a μ = 50", sum(ics$contiene)),
+       x = "Espesor (µm)", y = "Muestra", colour = NULL)
+```
+
+Cada muestra da un intervalo **distinto**; a la larga, ≈ 95 de cada 100
+atrapan a $\mu$.
+
+## ¿De qué depende el ancho del intervalo?
+
+```{r ancho, fig.height = 3.5}
+expand_grid(n = 5:100, confianza = c(0.90, 0.95, 0.99)) |>
+  mutate(semiancho = qt(1 - (1 - confianza) / 2, n - 1) * s / sqrt(n)) |>
+  ggplot(aes(n, semiancho, colour = factor(confianza))) +
+  geom_line(linewidth = 1) +
+  labs(title = sprintf("Semiancho del IC para μ con s = %.2f µm", s),
+       x = "Tamaño de muestra n", y = "Semiancho (µm)", colour = "Confianza")
+```
+
+-   **Más confianza** → intervalo **más ancho** (no hay almuerzo
+    gratis).
+-   **Más datos** → intervalo **más angosto**, pero con rendimiento
+    decreciente ($1/\sqrt{n}$).
+-   **Menos variabilidad** ($s$) → intervalo más angosto: mejorar el
+    proceso o la medición ayuda tanto como medir más.
+
+## Tamaño de muestra para estimar una media
+
+Para que el semiancho no supere un error $E$, con $\sigma$ aproximada de
+datos históricos o de un piloto:
+
+$$
+n = \left(\frac{z_{\alpha/2}\,\sigma}{E}\right)^2 \quad(\text{redondear hacia arriba}).
+$$
+
+```{r n-estimar}
+n_para_E <- function(E, sigma, conf = 0.95) ceiling((qnorm(1 - (1 - conf) / 2) * sigma / E)^2)
+tibble(E_um = c(1, 0.5, 0.25)) |>
+  mutate(n_necesario = map_dbl(E_um, n_para_E, sigma = s)) |>
+  kable(caption = "Piezas necesarias para estimar el espesor medio con error ± E (95 %)")
+```
+
+Reducir el error a la mitad exige **cuatro veces** más piezas.
+
+## ✍️ Tu turno {.unnumbered}
+
+Con el peso de las 50 bolsas de azúcar de 1000 g (`bolsas`):
+
+1.  Calcula el IC del 95 % para el peso medio y para $\sigma$. ¿Está la
+    etiqueta de 1000 g dentro del IC de la media?
+2.  ¿Cuántas bolsas harían falta para estimar el peso medio con un error
+    de ± 0.5 g?
+
+```{r turno-2, eval = FALSE}
+peso <- bolsas$peso_g
+# tu código aquí
+```
+
+<details>
+
+<summary>Ver solución</summary>
+
+```{r turno-2-sol}
+peso <- bolsas$peso_g
+t.test(peso)$conf.int
+sqrt((length(peso) - 1) * var(peso) / qchisq(c(0.975, 0.025), length(peso) - 1))
+n_para_E(E = 0.5, sigma = sd(peso))
+```
+
+El IC de la media está por encima de 1000 g: en promedio se llena **de
+más**.
+
+</details>
+
+## Ideas clave del bloque 2 {.unnumbered}
+
+-   IC = estimador ± valor crítico × error estándar.
+-   La confianza es del **procedimiento**: ≈ 95 de cada 100 intervalos
+    contienen el parámetro.
+-   El IC para $\sigma$ es asimétrico y exige normalidad.
+-   El ancho depende de la confianza, de $s$ y de $n$; $n$ se puede
+    **planear**.
+
+------------------------------------------------------------------------
+
+# Bloque 3 · Prueba de hipótesis para una muestra
+
+> **Pregunta del bloque.** La meta de humedad del café es 11 %. Con 20
+> lotes, ¿hay evidencia de que la humedad promedio la **supera**, o la
+> diferencia es solo ruido?
+
+## Las hipótesis
+
+-   **Hipótesis nula** $H_0$: el estado "sin cambio" o "cumple". Siempre
+    contiene la **igualdad**.
+-   **Hipótesis alternativa** $H_1$: lo que se quiere **demostrar** con
+    evidencia.
+
+| Pregunta del proceso | $H_0$ | $H_1$ | Tipo |
+|------------------|------------------|------------------|------------------|
+| ¿El llenado promedio difiere de 500 mL? | $\mu = 500$ | $\mu \ne 500$ | Bilateral |
+| ¿La humedad promedio supera la meta de 11 %? | $\mu \le 11$ | $\mu > 11$ | Cola derecha |
+| ¿La desviación del espesor es menor que 2.5 µm? | $\sigma \ge 2.5$ | $\sigma < 2.5$ | Cola izquierda |
+
+> La alternativa se define **antes** de ver los datos, desde la pregunta
+> del negocio. Cambiarla después para "lograr" significancia invalida la
+> prueba.
+
+**Analogía del juicio:** $H_0$ = "el acusado es inocente". Solo se
+condena (se rechaza $H_0$) si la evidencia es contundente. "No culpable"
+**no** significa "inocente demostrado": significa que no hubo evidencia
+suficiente.
+
+## Procedimiento en cinco pasos
+
+1.  Plantear $H_0$ y $H_1$; fijar $\alpha$.
+2.  Verificar supuestos (independencia; normalidad según la prueba).
+3.  Calcular el **estadístico de prueba**, p. ej.
+    $t_0 = \dfrac{\bar{y}-\mu_0}{s/\sqrt{n}}$: *¿a cuántos errores
+    estándar está la media observada del valor de* $H_0$?
+4.  Obtener el **valor p** (o comparar $t_0$ con el valor crítico).
+5.  Decidir y **concluir en el lenguaje del proceso**, acompañado del
+    IC.
+
+## Los dos tipos de error
+
+| Decisión  Realidad | $H_0$ verdadera | $H_0$ falsa |
+|------------------------|------------------------|------------------------|
+| **No rechazar** $H_0$ | Correcto $(1-\alpha)$ | **Error tipo II** $(\beta)$ |
+| **Rechazar** $H_0$ | **Error tipo I** $(\alpha)$ | Correcto: **potencia** $(1-\beta)$ |
+
+-   **Error tipo I** = **falsa alarma**: se detiene o ajusta un proceso
+    que estaba bien (riesgo del productor).
+-   **Error tipo II** = **no detectar** un cambio real: se despacha
+    producto no conforme (riesgo del consumidor).
+
+$\alpha$ se fija directamente; $\beta$ depende de $n$, de la magnitud
+del cambio y de $\sigma$ (bloque 5).
+
+## Nivel de significación y valor p
+
+-   $\alpha$: probabilidad máxima de error tipo I que se acepta
+    (usualmente 0.05; en seguridad o salud, 0.01).
+-   **Valor p:** probabilidad, **suponiendo que** $H_0$ es verdadera, de
+    obtener un estadístico tan o más extremo que el observado. Mide
+    **qué tan sorprendentes** son los datos si $H_0$ fuera cierta.
+
+$$
+\text{valor } p \le \alpha \;\Rightarrow\; \text{se rechaza } H_0 .
+$$
+
+| ✅ Correcto | ❌ Incorrecto |
+|------------------------------------|------------------------------------|
+| "Si la humedad media fuera 11 %, sería raro (p = 0.01) observar una media muestral tan alta." | "Hay 1 % de probabilidad de que $H_0$ sea cierta." |
+| "No hay evidencia suficiente para afirmar que el promedio difiere de 500 mL." | "Se demostró que el promedio es 500 mL." |
+| "Es significativo; la diferencia (IC) es de 0.1 a 0.4 mL, irrelevante frente a la tolerancia." | "Es significativo, luego es importante." |
+
+> **Significancia estadística ≠ importancia práctica.** Reporta siempre
+> la **magnitud** del efecto con su IC.
+
+## Demostración: humedad del café (prueba $t$ para una media)
+
+La norma exige humedad ≤ 12 %; el beneficio fija una **meta de 11 %**.
+
+$$H_0: \mu \le 11 \qquad H_1: \mu > 11 \qquad \alpha = 0.05$$
+
+```{r humedad}
+humedad <- leer(datos_s1, "humedad-cafe.csv")$humedad_pct
+c(n = length(humedad), media = mean(humedad), s = sd(humedad)) |> round(3)
+shapiro.test(humedad)$p.value    # paso 2: supuesto de normalidad
+```
+
+**Pasos 3 y 4 a mano:**
+
+```{r humedad-manual}
+n_h <- length(humedad)
+t0 <- (mean(humedad) - 11) / (sd(humedad) / sqrt(n_h))
+c(t0 = t0, t_critico = qt(0.95, n_h - 1), valor_p = 1 - pt(t0, n_h - 1)) |> round(4)
+```
+
+**Lo mismo con R:**
+
+```{r humedad-ttest}
+prueba_h <- t.test(humedad, mu = 11, alternative = "greater")
+prueba_h
+```
+
+**Valor p y región crítica, gráficamente:**
+
+```{r area-p, fig.height = 3.2}
+curva <- tibble(x = seq(-4, 4, length.out = 400), d = dt(x, n_h - 1))
+ggplot(curva, aes(x, d)) + geom_line() +
+  geom_area(data = \(df) filter(df, x >= qt(0.95, n_h - 1)), fill = "orange", alpha = 0.4) +
+  geom_area(data = \(df) filter(df, x >= t0), fill = "red", alpha = 0.5) +
+  geom_vline(xintercept = t0, linetype = 2) +
+  annotate("text", x = t0, y = 0.38, label = sprintf("t0 = %.2f", t0), hjust = -0.1) +
+  labs(title = "Naranja: región crítica (α = 0.05) · Rojo: valor p",
+       subtitle = sprintf("Distribución t con %d gl, supuesta H0 verdadera", n_h - 1),
+       x = "t", y = "densidad")
+```
+
+**Paso 5, conclusión:** con valor p = `r signif(prueba_h$p.value, 3)` \<
+0.05 se **rechaza** $H_0$: la humedad promedio supera la meta de 11 %.
+El IC bilateral del 95 %, [`r round(t.test(humedad)$conf.int, 2)`] %,
+está por debajo del máximo de 12 %: **cumple la norma, pero no la meta
+interna**, y el secado debe ajustarse.
+
+## Dualidad IC ↔ prueba
+
+Para una prueba **bilateral** de nivel $\alpha$:
+
+$$
+\text{Se rechaza } H_0:\theta=\theta_0 \iff \theta_0 \notin \text{IC}_{100(1-\alpha)\%}(\theta).
+$$
+
+```{r dualidad}
+prueba_e <- t.test(espesor, mu = 50)
+c(valor_p = prueba_e$p.value, ic_inf = prueba_e$conf.int[1], ic_sup = prueba_e$conf.int[2]) |>
+  signif(4)
+```
+
+En el espesor, 50 µm está fuera del IC y, en coherencia, el valor p es
+menor que 0.05. El IC dice además **cuánto** se aleja el proceso del
+objetivo: por eso se reporta siempre.
+
+## Prueba para una varianza ($\chi^2$)
+
+$$
+\chi^2_0=\frac{(n-1)s^2}{\sigma_0^2} \sim \chi^2_{n-1}\ \text{bajo } H_0 .
+$$
+
+Espesor: $H_0: \sigma \ge 2.5$ vs. $H_1: \sigma < 2.5$ µm (cola
+izquierda).
+
+```{r prueba-varianza}
+chi0 <- (n - 1) * s^2 / 2.5^2
+c(chi0 = chi0, chi_critico = qchisq(0.05, n - 1), valor_p = pchisq(chi0, n - 1)) |> signif(4)
+```
+
+Se rechaza $H_0$: hay evidencia de que $\sigma < 2.5$ µm (coherente con
+el IC del bloque 2).
+
+## Simulación: $\alpha$ y potencia
+
+Simulamos 2000 veces el estudio de humedad ($n = 20$, $\sigma = 0.42$)
+para distintos valores **reales** de $\mu$ y contamos cuántas veces la
+prueba rechaza $H_0$.
+
+```{r errores}
+prob_rechazo <- function(mu, n = 20, sims = 2000) {
+  mean(replicate(sims, t.test(rnorm(n, mu, 0.42), mu = 11,
+                              alternative = "greater")$p.value < 0.05))
+}
+tibble(mu_real = c(11, 11.1, 11.2, 11.3, 11.4)) |>
+  mutate(prob_rechazar = map_dbl(mu_real, prob_rechazo),
+         significado = if_else(mu_real == 11, "α (error tipo I)", "potencia = 1 − β"),
+         beta = if_else(mu_real == 11, NA_real_, 1 - prob_rechazar)) |>
+  kable(digits = 3)
+```
+
+-   Si $H_0$ es cierta ($\mu = 11$), se rechaza ≈ 5 % de las veces:
+    **eso es** $\alpha$.
+-   Cuanto más lejos está $\mu$ de 11, mayor la **potencia**. Con
+    $\mu = 11.1$ y $n = 20$ la mayoría de las veces **no** se detecta el
+    cambio: un "no significativo" no prueba que todo esté bien.
+
+## ✍️ Tu turno {.unnumbered}
+
+La leche está rotulada con **3.0 %** de grasa. Con las 16 muestras de
+`grasa-leche.csv`:
+
+1.  Plantea $H_0$ y $H_1$ para verificar si el contenido medio
+    **difiere** del rotulado.
+2.  Realiza la prueba con $\alpha = 0.05$, reporta $t_0$, gl, valor p e
+    IC 95 %, y concluye.
+
+```{r turno-3, eval = FALSE}
+# grasa ya se leyó en el bloque 1
+# tu código aquí
+```
+
+<details>
+
+<summary>Ver solución</summary>
+
+$H_0: \mu = 3.0$ vs. $H_1: \mu \ne 3.0$ (bilateral).
+
+```{r turno-3-sol}
+shapiro.test(grasa$grasa_pct)$p.value
+t.test(grasa$grasa_pct, mu = 3.0)
+```
+
+Valor p \> 0.05: **no hay evidencia** de que el contenido medio difiera
+del rotulado (no "se demostró" que sea 3.0 %). El IC contiene 3.0 %.
+
+</details>
+
+## Ideas clave del bloque 3 {.unnumbered}
+
+-   $H_0$ contiene la igualdad; $H_1$ es lo que se quiere demostrar y se
+    fija **antes**.
+-   Valor p: qué tan raros son los datos **si** $H_0$ fuera cierta. No
+    es $P(H_0)$.
+-   Error I = falsa alarma ($\alpha$); error II = no detectar ($\beta$).
+-   No rechazar ≠ demostrar $H_0$. Reporta siempre el **IC**.
+
+------------------------------------------------------------------------
+
+# Bloque 4 · Comparación de dos poblaciones
+
+> **Pregunta del bloque.** ¿La línea A y la línea B tienen el mismo
+> tiempo de ciclo? ¿Dos durómetros miden lo mismo? La respuesta depende
+> de **cómo se recogieron los datos**.
+
+## ¿Qué prueba uso? La pregunta es el diseño
+
+```         
+¿Cuántas muestras?
+│
+├─ Una, contra un valor de referencia ............ t de una muestra (bloque 3)
+│
+└─ Dos
+   ├─ Las mismas unidades medidas dos veces
+   │  (antes/después, dos instrumentos) ......... t PAREADA
+   │
+   └─ Unidades distintas e independientes
+      ├─ ¿Varianzas iguales? (prueba F, gráficos)
+      │   ├─ Sí ................................. t con varianza combinada
+      │   └─ No / dudoso ......................... t de Welch (opción por defecto en R)
+      └─ ¿Se quiere comparar dispersión? ......... F (razón de varianzas) o Levene
+```
+
+## Fórmulas
+
+**Dos muestras independientes**, $H_0: \mu_1 = \mu_2$:
+
+|   | Estadístico | gl |
+|------------------------|------------------------|------------------------|
+| Combinada (varianzas iguales) | $t_0 = \dfrac{\bar{y}_1-\bar{y}_2}{s_p\sqrt{\frac{1}{n_1}+\frac{1}{n_2}}}$, con $s_p^2 = \dfrac{(n_1-1)s_1^2+(n_2-1)s_2^2}{n_1+n_2-2}$ | $n_1+n_2-2$ |
+| Welch (varianzas distintas) | $t_0 = \dfrac{\bar{y}_1-\bar{y}_2}{\sqrt{\frac{s_1^2}{n_1}+\frac{s_2^2}{n_2}}}$ | aproximados (no enteros) |
+
+> **Recomendación práctica.** Usa Welch por defecto
+> (`t.test(y ~ grupo)`): pierde muy poca potencia si las varianzas son
+> iguales y protege cuando no lo son.
+
+**Muestras pareadas:** se analizan las diferencias
+$d_i = y_{1i} - y_{2i}$ como una sola muestra:
+
+$$
+t_0 = \frac{\bar{d}}{s_d/\sqrt{n}} \sim t_{n-1}.
+$$
+
+**Razón de varianzas**, $H_0: \sigma_1^2 = \sigma_2^2$:
+
+$$
+F_0 = \frac{s_1^2}{s_2^2} \sim F_{n_1-1,\,n_2-1}.
+$$
+
+> ⚠️ La $F$ es **muy sensible a la no normalidad**. Si hay dudas, usa
+> **Levene** (`car::leveneTest`).
+
+## Demostración 1: dos líneas de ensamble (independientes)
+
+Tiempo de ciclo (s) de 15 ciclos en la línea A y 18 en la línea B.
+
+```{r ciclo}
+ciclo <- leer(datos_s2, "tiempo-ciclo-lineas.csv")
+ciclo |>
+  group_by(linea) |>
+  summarise(n = n(), media = mean(tiempo_ciclo_s), s = sd(tiempo_ciclo_s),
+            shapiro_p = shapiro.test(tiempo_ciclo_s)$p.value) |>
+  kable(digits = 3)
+```
+
+```{r ciclo-graf, fig.height = 3.5}
+ggplot(ciclo, aes(linea, tiempo_ciclo_s, fill = linea)) +
+  geom_boxplot(alpha = 0.4, width = 0.5, outlier.shape = NA, show.legend = FALSE) +
+  geom_jitter(width = 0.08, show.legend = FALSE) +
+  labs(x = "Línea", y = "Tiempo de ciclo (s)")
+```
+
+**¿Las varianzas son iguales?**
+
+```{r ciclo-var}
+prueba_f <- var.test(tiempo_ciclo_s ~ linea, data = ciclo)
+prueba_f
+leveneTest(tiempo_ciclo_s ~ factor(linea), data = ciclo)
+```
+
+**Comparación de medias: Welch vs. combinada.**
+
+```{r ciclo-t}
+welch <- t.test(tiempo_ciclo_s ~ linea, data = ciclo)
+combinada <- t.test(tiempo_ciclo_s ~ linea, data = ciclo, var.equal = TRUE)
+tibble(prueba = c("Welch", "Combinada"),
+       t = c(welch$statistic, combinada$statistic),
+       gl = c(welch$parameter, combinada$parameter),
+       valor_p = c(welch$p.value, combinada$p.value),
+       ic_inf = c(welch$conf.int[1], combinada$conf.int[1]),
+       ic_sup = c(welch$conf.int[2], combinada$conf.int[2])) |>
+  kable(digits = 4, caption = "IC 95 % para μA − μB (s)")
+```
+
+**Conclusión:** la razón de varianzas (p =
+`r round(prueba_f$p.value, 3)`) indica que la línea B es **más
+variable**, un hallazgo de calidad en sí mismo. Con Welch, la línea A es
+en promedio entre `r round(-welch$conf.int[2], 1)` y
+`r round(-welch$conf.int[1], 1)` s **más rápida** que B (IC 95 %).
+
+## Demostración 2: dos durómetros (pareados)
+
+Se midió la dureza Rockwell de **12 probetas**, cada una con **los dos**
+durómetros.
+
+```{r dureza, fig.height = 3.5}
+dureza <- leer(datos_s2, "dureza-durometros.csv") |>
+  mutate(diferencia = durometro_1 - durometro_2)
+dureza |>
+  pivot_longer(starts_with("durometro"), names_to = "instrumento", values_to = "hrc") |>
+  ggplot(aes(instrumento, hrc, group = probeta)) +
+  geom_line(colour = "grey60") + geom_point(size = 2) +
+  labs(title = "Cada línea es una probeta", x = NULL, y = "Dureza (HRC)")
+```
+
+La variabilidad **entre probetas** es grande; la diferencia **dentro**
+de cada probeta es pequeña pero casi siempre del mismo signo.
+
+```{r dureza-t}
+pareada <- t.test(dureza$durometro_1, dureza$durometro_2, paired = TRUE)
+mal <- t.test(dureza$durometro_1, dureza$durometro_2)   # ignora el emparejamiento
+tibble(analisis = c("Pareado (correcto)", "Dos muestras (incorrecto)"),
+       diferencia = c(pareada$estimate, mal$estimate[1] - mal$estimate[2]),
+       error_estandar = c(pareada$stderr, mal$stderr),
+       valor_p = c(pareada$p.value, mal$p.value)) |>
+  kable(digits = 4)
+shapiro.test(dureza$diferencia)$p.value   # supuesto: normalidad de las diferencias
+```
+
+-   **Pareado:** la variabilidad entre probetas se cancela, el EE es
+    pequeño y se detecta que el durómetro 2 lee en promedio
+    `r round(-pareada$estimate, 2)` HRC más.
+-   **Independiente:** la variabilidad entre probetas infla el EE y la
+    diferencia **no** se detecta. **Mismos datos, conclusión opuesta.**
+
+> Emparejar es la forma más simple de **bloqueo**, que retomarás en
+> ASC22.
+
+## Supuestos y reporte
+
+| Prueba | Supuestos | Si fallan |
+|------------------------|------------------------|------------------------|
+| $t$ (cualquiera) | Independencia; normalidad de cada grupo (o de las diferencias) | Con $n$ moderado la $t$ es robusta (TCL); con $n$ pequeño y asimetría: transformar o Wilcoxon 🔵 |
+| $F$ | Independencia; normalidad **estricta** | Levene |
+
+**Reporte mínimo:** prueba usada y por qué · estadístico · gl · valor p
+· **diferencia estimada con su IC** · conclusión en el lenguaje del
+proceso.
+
+## ✍️ Tu turno {.unnumbered}
+
+Para cada caso, **decide qué prueba corresponde** antes de calcular:
+
+1.  `temperatura-hornos.csv`: 10 hornos medidos con un sensor nuevo
+    (`sensor_c`) y con el patrón (`patron_c`). ¿El sensor nuevo tiene
+    sesgo?
+2.  `resistencia-cajas.csv`: 14 cajas de cada proveedor (`Norte`,
+    `Sur`). ¿Difieren en resistencia media? ¿Y en variabilidad?
+
+```{r turno-4, eval = FALSE}
+hornos <- leer(datos_s2, "temperatura-hornos.csv")
+cajas  <- leer(datos_s2, "resistencia-cajas.csv")
+# tu código aquí
+```
+
+<details>
+
+<summary>Ver solución</summary>
+
+```{r turno-4-sol}
+hornos <- leer(datos_s2, "temperatura-hornos.csv")
+t.test(hornos$sensor_c, hornos$patron_c, paired = TRUE)   # mismos hornos -> pareada
+
+cajas <- leer(datos_s2, "resistencia-cajas.csv")
+var.test(resistencia_kgf ~ proveedor, data = cajas)       # dispersión
+t.test(resistencia_kgf ~ proveedor, data = cajas)         # medias (Welch)
+```
+
+1.  Pareada: el sensor nuevo lee en promedio más que el patrón (valor p
+    \< 0.05); hay que calibrarlo.
+2.  Independientes: no hay evidencia de varianzas distintas; con Welch,
+    el proveedor Norte tiene mayor resistencia media (valor p ≈ 0.04),
+    con un IC que conviene comparar con la diferencia que le importa al
+    cliente.
+
+</details>
+
+## Ideas clave del bloque 4 {.unnumbered}
+
+-   La prueba se elige por **cómo se recogieron los datos**, no por cuál
+    da el valor p más bajo.
+-   Independientes: Welch por defecto; $F$ o Levene para comparar
+    dispersión.
+-   Mismas unidades medidas dos veces → **pareada**. Ignorarlo oculta
+    diferencias reales.
+
+------------------------------------------------------------------------
+
+# Bloque 5 · Pruebas de hipótesis en la práctica: ejemplos y lectura de salidas
+
+> **Pregunta del bloque.** R ya hace las cuentas; ¿cómo **leo** lo que
+> me devuelve y cómo lo convierto en una decisión sobre el proceso? ¿Y
+> cuántos datos necesito para que la prueba sirva?
+
+En este bloque resolvemos cinco casos completos. En todos seguimos los
+cinco pasos del bloque 3 y, sobre todo, **leemos la salida de R línea
+por línea**. Si el tiempo no alcanza, los ejemplos 4 y 5 quedan como
+lectura autónoma.
+
+## Cómo leer la salida de `t.test()`
+
+Volvamos a la prueba de humedad del café del bloque 3
+($H_0: \mu \le 11$ vs. $H_1: \mu > 11$):
+
+```{r anatomia}
+prueba_h
+```
+
+| Línea de la salida | Qué significa | Cómo se usa |
+|------------------------|------------------------|------------------------|
+| `One Sample t-test` | Tipo de prueba que se hizo | Verifica que sea la que pretendías (una muestra, Welch, pareada…) |
+| `data: humedad` | Variable(s) analizadas | Verifica que sean los datos correctos |
+| `t = …` | Estadístico $t_0$: a cuántos **errores estándar** está $\bar{y}$ del valor de $H_0$ | Cuanto más lejos de 0, más evidencia contra $H_0$ |
+| `df = …` | Grados de libertad ($n-1$ en una muestra) | Se reporta junto con $t_0$ |
+| `p-value = …` | Probabilidad de un $t$ tan o más extremo **si** $H_0$ fuera cierta | Si $p \le \alpha$ se rechaza $H_0$ |
+| `alternative hypothesis: true mean is greater than 11` | La $H_1$ que R probó | **Debe coincidir** con la que planteaste; si no, la prueba está mal |
+| `95 percent confidence interval: … Inf` | IC para $\mu$. Con `alternative = "greater"` es **unilateral**: solo da una cota inferior | "Con 95 % de confianza, la humedad media es al menos …" |
+| `sample estimates: mean of x` | La estimación puntual $\bar{y}$ | Es el "tamaño" del resultado: compárala con la meta |
+
+Los números también se pueden **extraer** del objeto para usarlos en el
+texto o en tablas:
+
+```{r extraer}
+c(t0 = unname(prueba_h$statistic), gl = unname(prueba_h$parameter),
+  valor_p = prueba_h$p.value, media = unname(prueba_h$estimate)) |> round(4)
+prueba_h$conf.int
+```
+
+**Lista de chequeo antes de concluir**
+
+1.  ¿Qué **parámetro** se prueba (media, varianza, proporción)?
+2.  ¿Una muestra, dos independientes o pareadas?
+3.  ¿$H_1$ es bilateral o unilateral? ¿Coincide con la línea
+    `alternative hypothesis`?
+4.  ¿Se verificaron los supuestos (independencia, normalidad)?
+5.  ¿$p \le \alpha$? → decisión.
+6.  ¿Qué dice el **IC** sobre la **magnitud**? ¿Importa frente a la
+    tolerancia?
+
+## Ejemplo 1 · Llenado de envases: prueba bilateral para una media
+
+**Contexto.** Los envases se rotulan con **500 mL**. Para la boquilla
+**B1** se midieron 60 envases. ¿El volumen medio **difiere** del
+nominal?
+
+$$H_0: \mu = 500 \qquad H_1: \mu \ne 500 \qquad \alpha = 0.05$$
+
+```{r ej1-datos}
+llenado <- leer(datos_s1, "llenado-envases.csv")
+b1 <- llenado |> filter(boquilla == "B1") |> pull(volumen_ml)
+c(n = length(b1), media = mean(b1), s = sd(b1), shapiro_p = shapiro.test(b1)$p.value) |>
+  round(3)
+```
+
+Supuestos: piezas independientes y Shapiro-Wilk sin evidencia contra la
+normalidad (además, con $n = 60$ el TCL protege a la $t$).
+
+```{r ej1-prueba}
+ej1 <- t.test(b1, mu = 500)
+ej1
+```
+
+**Lectura de la salida, línea por línea:**
+
+| Salida | Valor | Lectura |
+|------------------------|------------------------|------------------------|
+| `t` | `r round(ej1$statistic, 2)` | La media muestral está a casi 13 errores estándar de 500 mL: muy lejos de lo esperable si $H_0$ fuera cierta |
+| `df` | `r ej1$parameter` | $n - 1 = 59$ |
+| `p-value` | `< 2.2e-16` | R no imprime números menores que $2.2 \times 10^{-16}$ (la precisión del computador). Se reporta como **p \< 0.001** |
+| `alternative` | `not equal to 500` | Bilateral, como se planteó ✓ |
+| IC 95 % | [`r round(ej1$conf.int, 2)`] mL | El volumen medio real está entre esos valores; **500 no está dentro** (coherente con rechazar) |
+| `mean of x` | `r round(ej1$estimate, 2)` mL | Estimación puntual |
+
+**Conclusión en el lenguaje del proceso.** Se rechaza $H_0$: la boquilla
+B1 llena en promedio entre `r round(ej1$conf.int[1] - 500, 1)` y
+`r round(ej1$conf.int[2] - 500, 1)` mL **por encima** del nominal. No es
+un riesgo para el consumidor, pero es **producto regalado**: con un
+millón de envases al mes son ≈ `r round(1e6 * (ej1$estimate - 500) / 1000)`
+litros. Conviene recalibrar la boquilla.
+
+## Ejemplo 2 · Tapas inyectadas: prueba unilateral (cola izquierda)
+
+**Contexto.** Las tapas tienen peso nominal **12.0 g** (tolerancia ±0.5
+g). Se sospecha que la máquina **M3** produce tapas **más livianas**
+(llenado incompleto del molde).
+
+$$H_0: \mu \ge 12 \qquad H_1: \mu < 12 \qquad \alpha = 0.05$$
+
+```{r ej2-datos}
+tapas <- leer("../../pre-trabajos/datos/", "tapas-inyeccion.csv")
+m3 <- tapas |> filter(maquina == "M3") |> pull(peso_g)
+c(n = length(m3), media = mean(m3), s = sd(m3), shapiro_p = shapiro.test(m3)$p.value) |>
+  round(3)
+```
+
+```{r ej2-prueba}
+ej2 <- t.test(m3, mu = 12, alternative = "less")
+ej2
+```
+
+**Lectura de la salida:**
+
+-   `t` = `r round(ej2$statistic, 2)`: **negativo**, porque la media
+    muestral está por **debajo** de 12. En una prueba de cola izquierda
+    solo un $t_0$ negativo puede dar evidencia a favor de $H_1$.
+-   `p-value` = `r signif(ej2$p.value, 3)`: es el área **a la izquierda**
+    de $t_0$. Como $p < 0.05$, se rechaza $H_0$.
+-   `alternative hypothesis: true mean is less than 12` ✓.
+-   `95 percent confidence interval: -Inf` … `r round(ej2$conf.int[2], 3)`:
+    IC **unilateral**. Se lee: "con 95 % de confianza, el peso medio de
+    M3 es **a lo sumo** `r round(ej2$conf.int[2], 3)` g". Como esa cota
+    está por debajo de 12, es coherente con rechazar.
+
+**¿Qué hubiera pasado con una prueba bilateral?**
+
+```{r ej2-bilateral}
+c(p_unilateral = ej2$p.value, p_bilateral = t.test(m3, mu = 12)$p.value) |> round(4)
+```
+
+El valor p bilateral es **el doble** y queda por encima de 0.05. Por eso
+la alternativa se decide **antes** de ver los datos, a partir de la
+pregunta del proceso ("¿son **más livianas**?"). Elegir la cola
+después para "lograr" significancia es hacer trampa.
+
+**Significancia estadística vs. importancia práctica.** La diferencia
+estimada es de solo `r round(12 - mean(m3), 3)` g frente a una
+tolerancia de ±0.5 g. Lo preocupante de M3 no es tanto su media como su
+**variabilidad** ($s$ = `r round(sd(m3), 3)` g, el doble que las otras
+máquinas): con un modelo normal, la fracción estimada fuera de
+[11.5, 12.5] g es
+`r round(100 * (pnorm(11.5, mean(m3), sd(m3)) + 1 - pnorm(12.5, mean(m3), sd(m3))), 1)` %.
+
+## Ejemplo 3 · Diámetro de pernos: pruebas sobre la variabilidad
+
+**Contexto.** Pernos de **10.00 ± 0.15 mm**. Para que prácticamente
+todos queden dentro de tolerancia se exige $\sigma \le 0.05$ mm
+($\pm 3\sigma$ dentro de $\pm 0.15$). Se midieron 20 pernos por turno.
+
+```{r ej3-datos}
+pernos <- leer("../../pre-trabajos/datos/", "diametro-pernos.csv")
+pernos |> group_by(turno) |>
+  summarise(n = n(), media = mean(diametro_mm), s = sd(diametro_mm),
+            shapiro_p = shapiro.test(diametro_mm)$p.value) |>
+  kable(digits = 4)
+```
+
+### 3a. ¿La desviación del turno noche supera 0.05 mm? ($\chi^2$)
+
+$$H_0: \sigma \le 0.05 \qquad H_1: \sigma > 0.05 \qquad \alpha = 0.05$$
+
+R base no trae una función para esta prueba; se calcula con la fórmula
+$\chi^2_0 = (n-1)s^2/\sigma_0^2$:
+
+```{r ej3-chi}
+noche <- pernos |> filter(turno == "noche") |> pull(diametro_mm)
+n_no <- length(noche); s_no <- sd(noche)
+chi0_no <- (n_no - 1) * s_no^2 / 0.05^2
+c(s = s_no, chi0 = chi0_no, chi_critico = qchisq(0.95, n_no - 1),
+  valor_p = 1 - pchisq(chi0_no, n_no - 1)) |> round(4)
+```
+
+**Lectura:**
+
+-   `chi0` = `r round(chi0_no, 2)`: si $\sigma$ fuera exactamente 0.05,
+    esperaríamos un valor cercano a los gl ($n-1 = 19$). Está muy cerca.
+-   `chi_critico` = `r round(qchisq(0.95, n_no - 1), 2)`: solo se
+    rechazaría si $\chi^2_0$ lo superara (cola derecha porque $H_1$ es
+    "mayor que").
+-   `valor_p` = `r round(1 - pchisq(chi0_no, n_no - 1), 3)` \> 0.05: **no
+    se rechaza** $H_0$.
+
+**Conclusión.** No hay evidencia de que la variabilidad del turno noche
+supere el requisito. **Ojo:** tampoco se demostró que lo cumpla; $s$ =
+`r round(s_no, 4)` mm está prácticamente **en el límite**, así que el
+turno noche merece vigilancia.
+
+### 3b. ¿El turno noche es más variable que el de la mañana? ($F$)
+
+$$H_0: \sigma^2_{\text{mañana}} = \sigma^2_{\text{noche}} \qquad H_1: \sigma^2_{\text{mañana}} \ne \sigma^2_{\text{noche}}$$
+
+```{r ej3-f}
+man_noche <- pernos |> filter(turno != "tarde")
+ej3 <- var.test(diametro_mm ~ turno, data = man_noche)
+ej3
+leveneTest(diametro_mm ~ factor(turno), data = man_noche)
+```
+
+**Lectura de la salida de `var.test()`:**
+
+| Salida | Lectura |
+|------------------------------------|------------------------------------|
+| `F` = `r round(ej3$statistic, 3)` | Razón $s^2_{\text{mañana}}/s^2_{\text{noche}}$. El **orden** lo fija R: alfabético de los niveles (`manana` antes que `noche`). Menor que 1 → la mañana es menos variable |
+| `num df = 19, denom df = 19` | Grados de libertad del numerador y del denominador ($n_1-1$, $n_2-1$) |
+| `p-value` = `r round(ej3$p.value, 4)` | Menor que 0.05 → se rechaza la igualdad de varianzas |
+| IC 95 % [`r round(ej3$conf.int, 3)`] | IC para la **razón** $\sigma^2_1/\sigma^2_2$. Se compara con **1** (no con 0): si no contiene 1, las varianzas difieren |
+| `ratio of variances` | La razón estimada (igual a $F$) |
+
+**Conclusión.** El turno noche es más variable que el de la mañana: la
+varianza de la mañana es aproximadamente
+`r round(100 * ej3$estimate)` % de la de la noche. La prueba de Levene
+(más robusta si hay dudas de normalidad) llega a la misma conclusión: en
+su salida, la columna `Pr(>F)` es el valor p
+(`r signif(leveneTest(diametro_mm ~ factor(turno), data = man_noche)[1, 3], 3)`),
+y el asterisco `*` indica que es menor que 0.05 (ver la línea
+`Signif. codes`). Conviene revisar qué cambia en la noche (operario,
+ajuste de la máquina, temperatura).
+
+## Ejemplo 4 · Tapas M1 vs. M2: lectura de la salida de Welch
+
+**Contexto.** ¿Las máquinas M1 y M2 producen tapas del mismo peso medio?
+
+$$H_0: \mu_{M1} = \mu_{M2} \qquad H_1: \mu_{M1} \ne \mu_{M2}$$
+
+```{r ej4}
+m12 <- tapas |> filter(maquina %in% c("M1", "M2"))
+ej4 <- t.test(peso_g ~ maquina, data = m12)
+ej4
+```
+
+**Lectura de la salida:**
+
+-   `Welch Two Sample t-test`: R usa Welch por defecto (no supone
+    varianzas iguales).
+-   `data: peso_g by maquina`: compara `peso_g` entre los niveles de
+    `maquina`.
+-   `df` = `r round(ej4$parameter, 2)`: grados de libertad de Welch,
+    **no enteros**; es normal.
+-   `alternative hypothesis: true difference in means between group M1
+    and group M2 is not equal to 0`: la diferencia se calcula como
+    **M1 − M2** (orden alfabético de los niveles).
+-   IC 95 % [`r round(ej4$conf.int, 3)`] g: es para $\mu_{M1}-\mu_{M2}$.
+    **Ambos extremos son negativos** → M2 produce tapas más pesadas. No
+    contiene 0 → coherente con rechazar.
+-   `mean in group M1`, `mean in group M2`: medias de cada máquina.
+
+**Conclusión.** R muestra el valor p en **notación científica**:
+`r format(signif(ej4$p.value, 4), scientific = TRUE)` significa
+$`r signif(ej4$p.value, 4) * 1e6` \times 10^{-6}$ =
+`r format(signif(ej4$p.value, 4), scientific = FALSE)`; se reporta como
+p \< 0.001. M2 produce tapas en
+promedio entre `r round(-ej4$conf.int[2], 2)` y
+`r round(-ej4$conf.int[1], 2)` g **más pesadas** que M1. Ambas siguen
+dentro de 12.0 ± 0.5 g en promedio, pero M2 está corrida hacia el límite
+superior: conviene recentrarla.
+
+## Ejemplo 5 · Proporción de tapas defectuosas
+
+Muchas características de calidad son **atributos** (conforme / no
+conforme). El parámetro es la **proporción** $p$ de defectuosos y su
+estimador es $\hat{p} = x/n$.
+
+| Prueba | Estadístico / método | En R |
+|------------------------|------------------------|------------------------|
+| Una proporción (exacta) | Distribución binomial | `binom.test(x, n, p = p0, alternative = )` |
+| Una proporción (aproximada) | $z_0 = \dfrac{\hat{p}-p_0}{\sqrt{p_0(1-p_0)/n}}$; requiere $np_0 \ge 5$ y $n(1-p_0) \ge 5$ | `prop.test(x, n, p = p0)` |
+| Dos proporciones | Aproximación normal / $\chi^2$ | `prop.test(c(x1, x2), c(n1, n2))` |
+
+### 5a. ¿M3 supera el 15 % de defectuosas permitido?
+
+$$H_0: p \le 0.15 \qquad H_1: p > 0.15 \qquad \alpha = 0.05$$
+
+```{r ej5-datos}
+tapas <- tapas |> mutate(defectuosa = defecto != "ninguno")
+tapas |> group_by(maquina) |>
+  summarise(n = n(), defectuosas = sum(defectuosa), proporcion = mean(defectuosa)) |>
+  kable(digits = 3)
+x3 <- sum(tapas$defectuosa[tapas$maquina == "M3"])
+```
+
+```{r ej5-binom}
+ej5 <- binom.test(x3, 30, p = 0.15, alternative = "greater")
+ej5
+```
+
+**Lectura de la salida de `binom.test()`:**
+
+| Salida | Lectura |
+|------------------------------------|------------------------------------|
+| `number of successes` = `r x3` | Número de "éxitos" = tapas **defectuosas** (lo que contamos) |
+| `number of trials = 30` | Tamaño de muestra $n$ |
+| `p-value` = `r round(ej5$p.value, 4)` | Probabilidad de ver `r x3` o más defectuosas en 30 si la verdadera proporción fuera 15 % |
+| IC 95 % [`r round(ej5$conf.int[1], 3)`, 1] | IC unilateral: "con 95 % de confianza, la proporción es **al menos** `r round(100 * ej5$conf.int[1], 1)` %". Contiene 0.15 → coherente con no rechazar |
+| `probability of success` | $\hat{p} = `r x3`/30 = `r round(x3 / 30, 3)`$ |
+
+**Conclusión, con cuidado.** La proporción observada
+(`r round(100 * x3 / 30, 1)` %) es mucho mayor que 15 %, pero con solo 30
+tapas la prueba **no alcanza** a rechazar ($p$ = `r round(ej5$p.value, 3)`).
+Esto **no** demuestra que M3 cumpla: la muestra es pequeña para detectar
+esa diferencia. ¿Cuántas tapas harían falta?
+
+```{r ej5-potencia}
+h <- ES.h(0.27, 0.15)   # tamaño del efecto para proporciones (paquete pwr)
+ceiling(pwr.p.test(h = h, power = 0.80, sig.level = 0.05, alternative = "greater")$n)
+```
+
+### 5b. ¿M3 tiene más defectuosas que M1 y M2 juntas?
+
+```{r ej5-dos}
+x_otras <- sum(tapas$defectuosa[tapas$maquina != "M3"])
+prop.test(c(x3, x_otras), c(30, 60))
+```
+
+-   `X-squared` y `df = 1`: `prop.test` usa una aproximación $\chi^2$
+    (equivale a una $z$ al cuadrado).
+-   `prop 1`, `prop 2`: proporciones estimadas de cada grupo, en el
+    orden en que se escribieron (M3 primero).
+-   El IC es para $p_1 - p_2$; contiene 0 → no se rechaza.
+-   R puede advertir *"Chi-squared approximation may be incorrect"*:
+    significa que hay pocos defectos esperados en algún grupo. En ese
+    caso se usa la prueba exacta de Fisher:
+
+```{r ej5-fisher}
+fisher.test(table(tapas$maquina == "M3", tapas$defectuosa))$p.value
+```
+
+Misma conclusión: con estas muestras **no hay evidencia suficiente**,
+aunque los datos apuntan a que M3 tiene más defectos. La decisión
+práctica es **ampliar la muestra** de M3 antes de concluir.
+
+## Potencia y tamaño de muestra
+
+Los ejemplos 3a y 5 muestran el mismo problema: un "no significativo"
+con pocos datos no dice mucho. La solución es **planear** $n$.
+
+### Por qué planear $n$
+
+Un estudio con $n$ demasiado pequeño tiene **alto riesgo de error tipo
+II**: su "no significativo" no dice nada. Uno demasiado grande
+desperdicia recursos y vuelve significativas diferencias triviales. El
+tamaño de muestra se decide **antes** de recoger datos, con cuatro
+ingredientes (fijados tres, se obtiene el cuarto):
+
+1.  **Nivel de significación** $\alpha$ (riesgo de falsa alarma).
+2.  **Diferencia mínima de importancia práctica** $\delta$ — la define
+    el **dueño del proceso**.
+3.  **Variabilidad** $\sigma$ (históricos o piloto).
+4.  **Tamaño de muestra** $n$ ↔ **potencia** $1-\beta$ (usual ≥ 0.80;
+    crítico ≥ 0.90).
+
+Tamaño del efecto estandarizado: $d = \delta/\sigma$. Aproximación para
+dos muestras:
+
+$$
+n \approx \frac{2\,(z_{\alpha/2} + z_{\beta})^2\,\sigma^2}{\delta^2} \quad\text{por grupo.}
+$$
+
+Detectar la **mitad** de la diferencia exige **cuatro veces** más datos;
+reducir $\sigma$ es tan eficaz como aumentar $n$.
+
+### Demostración: ¿tenía potencia la comparación de líneas?
+
+La gerencia considera **relevante** una diferencia de **2 s** por ciclo;
+$s \approx 3$ s.
+
+```{r potencia}
+pot <- power.t.test(n = 15, delta = 2, sd = 3, sig.level = 0.05)
+pot
+```
+
+**Lectura de la salida de `power.t.test()`:** `n` es el tamaño **por
+grupo**; `delta` la diferencia que se quiere detectar; `sd` la
+desviación supuesta; `power` la probabilidad de detectarla. La nota
+final (`NOTE: n is number in *each* group`) recuerda que el total es
+$2n$.
+
+Con 15 ciclos por línea, una diferencia real de 2 s se detecta solo con
+probabilidad `r round(pot$power, 2)`: el estudio estaba
+**subdimensionado**.
+
+```{r n-potencia}
+c(n_por_grupo_80 = ceiling(power.t.test(power = 0.80, delta = 2, sd = 3)$n),
+  n_por_grupo_90 = ceiling(power.t.test(power = 0.90, delta = 2, sd = 3)$n),
+  n_pwr_d        = ceiling(pwr.t.test(d = 2 / 3, power = 0.80)$n))
+```
+
+**Curvas de potencia:**
+
+```{r curvas, fig.height = 3.5, fig.width = 10}
+c1 <- expand_grid(n = c(10, 20, 40), delta = seq(0, 5, by = 0.1)) |>
+  mutate(potencia = map2_dbl(n, delta, ~ power.t.test(n = .x, delta = .y, sd = 3)$power)) |>
+  ggplot(aes(delta, potencia, colour = factor(n))) +
+  geom_line(linewidth = 1) + geom_hline(yintercept = 0.8, linetype = 2) +
+  labs(title = "Potencia vs. diferencia real (σ = 3)", x = "δ (s)", y = "Potencia",
+       colour = "n por grupo")
+c2 <- tibble(n = 4:60) |>
+  mutate(`σ = 3` = map_dbl(n, ~ power.t.test(n = .x, delta = 2, sd = 3)$power),
+         `σ = 1.5` = map_dbl(n, ~ power.t.test(n = .x, delta = 2, sd = 1.5)$power)) |>
+  pivot_longer(-n, names_to = "sigma", values_to = "potencia") |>
+  ggplot(aes(n, potencia, colour = sigma)) +
+  geom_line(linewidth = 1) + geom_hline(yintercept = 0.8, linetype = 2) +
+  labs(title = "Reducir σ equivale a aumentar mucho n (δ = 2)", x = "n por grupo",
+       y = NULL, colour = NULL)
+c1 + c2
+```
+
+Para datos **pareados** o una muestra se usa `type = "paired"` o
+`type = "one.sample"`:
+
+```{r n-pareada}
+ceiling(power.t.test(power = 0.90, delta = 0.5, sd = 0.5, type = "paired")$n)
+```
+
+## Errores frecuentes al leer una salida
+
+| ❌ Error | ✅ Lectura correcta |
+|------------------------------------|------------------------------------|
+| "p = 0.07, entonces el proceso cumple" | No hay evidencia suficiente para afirmar que **no** cumple; revisa la potencia y el IC |
+| "p \< 2.2e-16 significa p = 0" | Significa que es menor que la precisión del computador; se reporta p \< 0.001 |
+| Leer el IC de un `var.test` contra 0 | El IC es para una **razón**: se compara con **1** |
+| Ignorar el signo de la diferencia | R resta en orden alfabético de los niveles (M1 − M2); revisa `mean in group` |
+| Usar `alternative = "two.sided"` cuando la pregunta es "¿es menor?" (o al revés) | La línea `alternative hypothesis` debe coincidir con tu $H_1$ |
+| "Es significativo, luego es importante" | Compara la magnitud (IC) con la tolerancia o con lo que le importa al proceso |
+| Reportar solo el valor p | Reporta estadístico, gl, valor p, **estimación con IC** y conclusión |
+
+## Mapa final: ¿qué prueba uso?
+
+| Pregunta | Datos | Prueba | En R |
+|------------------|------------------|------------------|------------------|
+| ¿Mis datos son normales? | Una muestra | Q-Q + Shapiro-Wilk / Anderson-Darling | `shapiro.test()`, `nortest::ad.test()` |
+| ¿Cuánto vale la media? | Una muestra | IC $t$ | `t.test(y)$conf.int` |
+| ¿La media cumple un valor? | Una muestra | $t$ de una muestra | `t.test(y, mu = , alternative = )` |
+| ¿La variabilidad cumple un valor? | Una muestra, normal | $\chi^2$ | `pchisq((n-1)*s^2/sigma0^2, n-1)` |
+| ¿Dos procesos difieren en media? | Independientes | $t$ de Welch | `t.test(y ~ grupo)` |
+| ¿Dos procesos difieren en dispersión? | Independientes | $F$ / Levene | `var.test()`, `car::leveneTest()` |
+| ¿Dos condiciones sobre las mismas unidades? | Pareados | $t$ pareada | `t.test(x1, x2, paired = TRUE)` |
+| ¿La proporción de defectuosos cumple un valor? | Atributos, una muestra | Binomial exacta | `binom.test(x, n, p = )` |
+| ¿Dos procesos difieren en proporción de defectuosos? | Atributos, dos muestras | $\chi^2$ / Fisher | `prop.test()`, `fisher.test()` |
+| ¿Cuántos datos necesito? | Planeación | Potencia | `power.t.test()`, `pwr::pwr.t.test()`, `pwr::pwr.p.test()` |
+
+## ✍️ Tu turno {.unnumbered}
+
+1.  Se quiere detectar si el peso medio de las bolsas de azúcar se
+    desplaza **2 g** respecto a 1000 g, con $\sigma \approx 5$ g,
+    $\alpha = 0.05$ y potencia 0.90. ¿Cuántas bolsas hay que pesar (una
+    muestra)?
+2.  Con los pernos del **turno tarde**, prueba si el diámetro medio
+    difiere de 10.00 mm. Escribe la lectura de **cada línea** de la
+    salida, como en el ejemplo 1.
+3.  ¿Hay evidencia de que la máquina **M1** tenga **menos** del 15 % de
+    tapas defectuosas? Usa `binom.test()` y lee la salida.
+
+```{r turno-5, eval = FALSE}
+# 2. tarde <- pernos |> filter(turno == "tarde") |> pull(diametro_mm)
+#    t.test(tarde, mu = ...)
+# 3. binom.test(x = ..., n = 30, p = 0.15, alternative = "...")
+```
+
+<details>
+
+<summary>Ver solución</summary>
+
+```{r turno-5-sol}
+ceiling(power.t.test(delta = 2, sd = 5, power = 0.90, type = "one.sample")$n)
+
+tarde <- pernos |> filter(turno == "tarde") |> pull(diametro_mm)
+t.test(tarde, mu = 10)
+
+x1 <- sum(tapas$defectuosa[tapas$maquina == "M1"])
+binom.test(x1, 30, p = 0.15, alternative = "less")
+```
+
+2.  Valor p grande e IC que contiene 10.00 mm: no hay evidencia de que
+    el turno tarde esté descentrado.
+3.  Aunque $\hat{p}$ = 10 % \< 15 %, el valor p es mayor que 0.05: con
+    30 tapas no se puede **demostrar** que M1 cumpla el límite.
+
+</details>
+
+## Ideas clave del bloque 5 {.unnumbered}
+
+-   Lee **cada línea** de la salida: tipo de prueba, estadístico, gl,
+    valor p, **alternativa**, IC y estimación.
+-   La alternativa se fija **antes** de ver los datos; un IC unilateral
+    da una cota (`-Inf` o `Inf` en un extremo).
+-   El IC de una **razón** de varianzas se compara con 1; el de una
+    diferencia, con 0.
+-   Para atributos (defectuosos) se usan pruebas de **proporciones**.
+-   "No significativo" con poca potencia **no** es evidencia de que no
+    hay efecto: el tamaño de muestra se **planea**.
+
+------------------------------------------------------------------------
+
+# Taller de aplicación {.unnumbered}
+
+El taller tiene **dos ejercicios** y se entrega en la plantilla
+[`../ejercicios/taller-inferencia_plantilla.Rmd`](../ejercicios/taller-inferencia_plantilla.Rmd):
+
+1.  **Soldadura: procedimiento actual vs. nuevo.** El código ya está
+    resuelto; tu entrega es el **análisis**: plantear hipótesis, leer
+    las salidas y concluir en el lenguaje del proceso.
+2.  **Medidores de pH.** Los datos ya están cargados; tú escribes el
+    código (con pistas en cada paso) y el análisis.
+
+------------------------------------------------------------------------
+
+# Referencias {.unnumbered}
+
+-   Montgomery, D. C. y Runger, G. C. *Probabilidad y estadística
+    aplicadas a la ingeniería*, cap. 7–10.
+-   Montgomery, D. C. *Design and Analysis of Experiments*, cap. 2–3.
+-   Navidi, W. *Estadística para ingenieros y científicos*, cap. 4–6.
+-   Wasserstein, R. L. y Lazar, N. A. (2016). The ASA statement on
+    p-values. *The American Statistician*, 70(2), 129–133.

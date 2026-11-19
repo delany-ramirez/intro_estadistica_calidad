@@ -19,7 +19,7 @@ Compilar cada versión:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4)
-library(tidyverse); library(knitr); library(car); library(broom)
+library(tidyverse); library(knitr); library(car)
 theme_set(theme_minimal(base_size = 12))
 iny <- read_csv(paste0("datos/inyeccion-version-", params$version, ".csv"))
 ```
@@ -55,38 +55,59 @@ w
   [`r round(w$conf.int, 3)`] g.
 - Valor p de la $F$: **`r round(f$p.value, 3)`**.
 
-# Pregunta 3 — Regresión
+# Pregunta 3 — ¿Cumple cada máquina la especificación?
 
 ```{r p3}
-m <- lm(peso_g ~ temperatura_molde_c + presion_bar + maquina, data = iny)
-tidy(m, conf.int = TRUE) |> kable(digits = 4)
-glance(m) |> select(r.squared, adj.r.squared, sigma) |> kable(digits = 4)
-pred <- predict(m, tibble(maquina = "M1", temperatura_molde_c = 55, presion_bar = 100),
-                interval = "prediction")
-pred
+LIE <- 27.4; LSE <- 28.6; sigma0 <- 0.2
+por_maquina <- iny |>
+  group_by(maquina) |>
+  summarise(n = n(), media = mean(peso_g), s = sd(peso_g),
+            ic_mu_inf = t.test(peso_g)$conf.int[1],
+            ic_mu_sup = t.test(peso_g)$conf.int[2],
+            ic_sigma_inf = sqrt((n - 1) * s^2 / qchisq(0.975, n - 1)),
+            ic_sigma_sup = sqrt((n - 1) * s^2 / qchisq(0.025, n - 1)),
+            t0 = t.test(peso_g, mu = 28)$statistic,
+            p_media = t.test(peso_g, mu = 28)$p.value,
+            chi0 = (n - 1) * s^2 / sigma0^2,
+            p_sigma = 1 - pchisq(chi0, n - 1),
+            frac_fuera = pnorm(LIE, media, s) + 1 - pnorm(LSE, media, s))
+por_maquina |> select(maquina, n, media, s, starts_with("ic_")) |> kable(digits = 3)
+por_maquina |> select(maquina, t0, p_media, chi0, p_sigma, frac_fuera) |> kable(digits = 4)
 ```
 
-- Ecuación: $\widehat{\text{peso}} = `r round(coef(m)[1], 3)` + `r round(coef(m)[2], 4)`\,T +
-  `r round(coef(m)[3], 4)`\,P + `r round(coef(m)[4], 3)`\,[M2]$.
-- **Presión:** cada bar adicional se asocia con `r round(coef(m)[3], 4)` g más, a igual
-  temperatura y máquina.
-- **Máquina:** a igual temperatura y presión, M2 produce piezas
-  `r round(coef(m)[4], 3)` g más pesadas (p = `r signif(tidy(m)$p.value[4], 3)`).
-- **3c (clave de la pregunta):** la $t$ de la Pregunta 2 compara máquinas **sin descontar**
-  la variación por temperatura y presión, que queda en el error. El modelo la descuenta;
-  por eso el efecto de la máquina puede aparecer más (o menos) claro. Se espera que el
-  estudiante identifique esta idea, sea cual sea la versión.
-- **3d:** IP 95 % = [`r round(pred[2], 3)`, `r round(pred[3], 3)`] g. Cumple 28.0 ± 0.6 g
-  solo si el IP queda dentro de [27.4, 28.6].
+- **3a:** IC por máquina en la primera tabla. Se valora que se use $t$ para $\mu$ y
+  $\chi^2$ para $\sigma$, y que el estudiante recuerde que el IC para $\sigma$ exige
+  normalidad (verificada en P2a).
+- **3b:** $H_0: \mu = 28.0$ vs. $H_1: \mu \ne 28.0$, con $gl = 19$. Valores p:
+  M1 = **`r signif(por_maquina$p_media[1], 3)`**, M2 = **`r signif(por_maquina$p_media[2], 3)`**.
+  La decisión debe coincidir con si 28.0 está o no dentro del IC de 3a (dualidad). Un valor
+  p > 0.05 se lee como "no hay evidencia de descentrado", **no** como "está centrada".
+- **3c:** $H_0: \sigma \le 0.2$ vs. $H_1: \sigma > 0.2$ (cola derecha),
+  $\chi^2_0 = (n-1)s^2/0.2^2$. Valores p: M1 = **`r format(signif(por_maquina$p_sigma[1], 3), scientific = TRUE)`**,
+  M2 = **`r format(signif(por_maquina$p_sigma[2], 3), scientific = TRUE)`**: en ambas máquinas hay evidencia fuerte de
+  que $\sigma$ supera 0.2 g (el IC para $\sigma$ de 3a queda por encima de 0.2). Fracción
+  estimada fuera de tolerancia: M1 ≈ **`r round(100 * por_maquina$frac_fuera[1], 1)` %**,
+  M2 ≈ **`r round(100 * por_maquina$frac_fuera[2], 1)` %**.
+- **3d:** el problema principal es de **variabilidad**: las medias están cerca del
+  objetivo (descentrado pequeño o no detectable), pero $\sigma$ es casi el doble de lo
+  requerido. Recentrar no basta; hay que reducir la variabilidad (p. ej., controlar
+  temperatura y presión).
 
-# Pregunta 4 — Validación
+# Pregunta 4 — Planeación del estudio
 
-```{r p4, fig.height = 6}
-par(mfrow = c(2, 2)); plot(m); par(mfrow = c(1, 1))
-c(shapiro_p = shapiro.test(residuals(m))$p.value, ncv_p = ncvTest(m)$p,
-  max_cook = max(cooks.distance(m))) |> round(3)
+```{r p4}
+s_comb <- sqrt(mean(tapply(iny$peso_g, iny$maquina, var)))   # n iguales: promedio de varianzas
+pot <- power.t.test(n = 20, delta = 0.2, sd = s_comb, sig.level = 0.05)$power
+n90 <- ceiling(power.t.test(power = 0.90, delta = 0.2, sd = s_comb, sig.level = 0.05)$n)
+c(s_combinada = s_comb, potencia_n20 = pot, n_por_maquina_90 = n90) |> round(3)
 ```
 
-Se espera: lectura de los cuatro gráficos, al menos una prueba formal, conclusión sobre
-supuestos e influencia, y una recomendación concreta (p. ej., controlar presión y
-temperatura; ajustar la máquina que se desvía del objetivo).
+- **4a:** potencia ≈ **`r round(pot, 2)`**: con 20 piezas por máquina, una diferencia real de
+  0.2 g se detectaría menos de la mitad de las veces. Se acepta también `pwr.t.test` con
+  $d = 0.2/s_p$, o $s_p$ tomado de `t.test(..., var.equal = TRUE)`.
+- **4b:** se necesitan ≈ **`r n90`** piezas por máquina.
+- **4c (clave de la pregunta):** el "no significativo" de 2b **no** demuestra que las
+  máquinas sean iguales: el estudio tenía poca potencia para la diferencia que le importa
+  al área. Se espera una recomendación concreta, p. ej.: ampliar el muestreo a ≈ `r n90`
+  piezas por máquina si interesa esa diferencia, y sobre todo **reducir la variabilidad**
+  (hallazgo de 3c), que además aumenta la potencia de cualquier comparación futura.

@@ -1,0 +1,294 @@
+---
+title: "Taller de aplicación — Inferencia estadística"
+subtitle: "AS001 Análisis Estadístico · Sesión 2"
+author: "NOMBRE APELLIDO"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4, fig.align = "center")
+```
+
+# Instrucciones {.unnumbered}
+
+- El taller tiene **dos ejercicios**. Entrega este archivo `.Rmd` diligenciado y el
+  `.html` compilado (botón **Knit**).
+- **Ejercicio 1:** el código **ya está resuelto**. Ejecútalo, lee las salidas y escribe
+  tu análisis donde dice *Análisis:*. Se califica el **razonamiento**: hipótesis bien
+  planteadas, lectura correcta de las salidas y conclusiones en el lenguaje del proceso.
+- **Ejercicio 2:** los datos ya están cargados; **tú escribes el código**. En cada
+  paso hay **pistas** (líneas que empiezan con `#`). Copia la pista en una línea nueva
+  sin el `#` y completa los espacios `___`.
+- Usa $\alpha = 0.05$ en todas las pruebas. Toda cifra que menciones debe salir de una
+  salida de R.
+- Material de apoyo: [`../notebooks/00-inferencia-intensivo.Rmd`](../notebooks/00-inferencia-intensivo.Rmd)
+  (bloques 3, 4 y 5).
+
+```{r paquetes}
+library(tidyverse)
+library(knitr)
+library(car)
+theme_set(theme_minimal(base_size = 12))
+```
+
+---
+
+# Ejercicio 1 · Soldadura: procedimiento actual vs. nuevo (código resuelto)
+
+## Contexto {.unnumbered}
+
+Una metalmecánica suelda soportes estructurales. El cliente exige una resistencia a la
+tracción **mínima de 480 MPa** en cada unión. Ingeniería propone un **procedimiento
+nuevo** de soldadura (otro amperaje y precalentamiento) y lo compara con el **actual**:
+se soldaron 16 probetas con cada procedimiento, en orden aleatorio, y se ensayaron a
+tracción.
+
+| Variable | Descripción |
+|---|---|
+| `procedimiento` | `actual` o `nuevo` |
+| `resistencia_mpa` | Resistencia a la tracción de la unión (MPa) |
+
+```{r e1-datos}
+sold <- read_csv("../datos/soldadura-procedimientos.csv")
+actual <- sold |> filter(procedimiento == "actual") |> pull(resistencia_mpa)
+nuevo  <- sold |> filter(procedimiento == "nuevo")  |> pull(resistencia_mpa)
+```
+
+## Descripción y supuestos
+
+```{r e1-descripcion}
+sold |>
+  group_by(procedimiento) |>
+  summarise(n = n(), media = mean(resistencia_mpa), mediana = median(resistencia_mpa),
+            s = sd(resistencia_mpa), min = min(resistencia_mpa), max = max(resistencia_mpa),
+            shapiro_p = shapiro.test(resistencia_mpa)$p.value) |>
+  kable(digits = 3)
+
+ggplot(sold, aes(procedimiento, resistencia_mpa, fill = procedimiento)) +
+  geom_boxplot(alpha = 0.4, width = 0.5, outlier.shape = NA, show.legend = FALSE) +
+  geom_jitter(width = 0.08, show.legend = FALSE) +
+  geom_hline(yintercept = 480, colour = "red", linetype = 2) +
+  labs(x = "Procedimiento", y = "Resistencia (MPa)", title = "Línea roja: mínimo de 480 MPa")
+
+ggplot(sold, aes(sample = resistencia_mpa, colour = procedimiento)) +
+  geom_qq() + geom_qq_line() +
+  labs(x = "Cuantil teórico N(0,1)", y = "Resistencia (MPa)")
+```
+
+**Preguntas:** a) Compara los dos procedimientos en **centro** y **dispersión**. b) ¿Hay
+probetas por debajo de 480 MPa? ¿De qué procedimiento? c) ¿Se puede suponer normalidad
+en cada grupo? Justifica con el Q-Q **y** con Shapiro-Wilk.
+
+*Análisis:*
+
+## ¿Cada procedimiento cumple, en promedio, el mínimo de 480 MPa?
+
+```{r e1-media-minimo}
+t.test(actual, mu = 480, alternative = "greater")
+t.test(nuevo,  mu = 480, alternative = "greater")
+```
+
+**Preguntas:** a) Escribe $H_0$ y $H_1$ y explica por qué la alternativa es
+**unilateral derecha** (`"greater"`). b) Para cada procedimiento reporta $t_0$, gl y
+valor p, y decide. c) Interpreta el IC (fíjate en que un extremo es `Inf`).
+
+*Análisis:*
+
+## ¿Qué fracción de uniones quedaría por debajo de 480 MPa?
+
+```{r e1-fraccion}
+tibble(procedimiento = c("actual", "nuevo"),
+       media = c(mean(actual), mean(nuevo)),
+       s = c(sd(actual), sd(nuevo))) |>
+  mutate(fraccion_bajo_480 = pnorm(480, media, s),
+         uniones_por_mil = round(1000 * fraccion_bajo_480, 1)) |>
+  kable(digits = 4)
+```
+
+**Preguntas:** a) ¿Cuántas uniones de cada mil quedarían por debajo del mínimo con cada
+procedimiento? b) El punto anterior dijo que ambos procedimientos cumplen **en
+promedio**. ¿Por qué eso **no basta** para el cliente? (Pista: el requisito es para
+**cada** unión, no para el promedio).
+
+*Análisis:*
+
+## ¿Difieren en variabilidad?
+
+```{r e1-varianzas}
+var.test(actual, nuevo)
+leveneTest(resistencia_mpa ~ factor(procedimiento), data = sold)
+```
+
+**Preguntas:** a) Plantea $H_0$ y $H_1$. b) Lee la salida de `var.test`: ¿qué razón se
+calculó (qué varianza va arriba)? ¿Contra qué valor se compara el IC? c) Decide y
+concluye. ¿Coincide Levene? d) Observa la razón $s^2_{\text{actual}}/s^2_{\text{nuevo}}$:
+¿es "grande" en la práctica aunque la prueba no sea significativa? ¿Qué te dice eso sobre
+el tamaño de muestra?
+
+*Análisis:*
+
+## ¿El procedimiento nuevo da mayor resistencia media?
+
+```{r e1-medias}
+t.test(nuevo, actual, alternative = "greater")   # Welch: no supone varianzas iguales
+```
+
+**Preguntas:** a) Escribe $H_0$ y $H_1$. ¿Por qué se usa la prueba para **muestras
+independientes** y no la pareada? b) Reporta $t_0$, gl (¿por qué no son enteros?) y
+valor p, y decide. c) Interpreta la cota del IC: ¿al menos cuántos MPa de mejora se
+pueden asegurar con 95 % de confianza?
+
+*Análisis:*
+
+## ¿Tenía potencia el estudio?
+
+Ingeniería considera **relevante** una mejora de **5 MPa** en la resistencia media.
+
+```{r e1-potencia}
+s_comb <- sqrt((var(actual) + var(nuevo)) / 2)          # desviación combinada (n iguales)
+power.t.test(n = 16, delta = 5, sd = s_comb, alternative = "one.sided")
+ceiling(power.t.test(power = 0.90, delta = 5, sd = s_comb, alternative = "one.sided")$n)
+```
+
+**Preguntas:** a) ¿Qué probabilidad tenía el estudio de detectar una mejora real de 5
+MPa? b) ¿Cuántas probetas **por procedimiento** harían falta para una potencia de 0.90?
+
+*Análisis:*
+
+## Recomendación
+
+**Pregunta:** en 4–5 líneas, escribe tu recomendación al jefe de producción. ¿Adoptarías
+el procedimiento nuevo? Apóyate en las cifras de los puntos anteriores (media,
+variabilidad y fracción bajo el mínimo).
+
+*Análisis:*
+
+---
+
+# Ejercicio 2 · Medidores de pH (tú escribes el código)
+
+## Contexto {.unnumbered}
+
+Una planta de jugos controla el **pH** de cada lote (la acidez es crítica para la
+inocuidad). El medidor de **planta** es rápido; el de **laboratorio** es la
+**referencia**. Se midieron **15 lotes con ambos medidores**. El área de calidad acepta
+un **sesgo** del medidor de planta de **a lo sumo ±0.10** unidades de pH.
+
+| Variable | Descripción |
+|---|---|
+| `lote` | Identificador del lote |
+| `ph_laboratorio` | pH medido con el medidor de laboratorio (referencia) |
+| `ph_planta` | pH medido con el medidor de planta |
+
+```{r e2-datos}
+ph <- read_csv("../datos/ph-medidores.csv") |>
+  mutate(diferencia = ph_planta - ph_laboratorio)   # sesgo de cada lote
+kable(ph, digits = 2)
+```
+
+**Antes de calcular:** ¿los datos son **independientes** o **pareados**? Justifica en una
+línea.
+
+*Respuesta:*
+
+## Gráfico de los lotes y resumen de las diferencias
+
+Haz un gráfico en el que cada lote sea una línea que une su pH de laboratorio con su pH de
+planta, y calcula la media y la desviación estándar de `diferencia`.
+
+```{r e2-grafico}
+# Pista 1 — pasar las dos columnas de pH a formato largo y graficar:
+# ph |>
+#   pivot_longer(c(ph_laboratorio, ph_planta), names_to = "medidor", values_to = "valor_ph") |>
+#   ggplot(aes(x = medidor, y = valor_ph, group = lote)) +
+#   geom_line(colour = "grey60") + geom_point(size = 2) +
+#   labs(x = NULL, y = "pH", title = "Cada línea es un lote")
+
+# Pista 2 — resumen de las diferencias:
+# c(n = nrow(ph), media = mean(ph$___), s = sd(ph$___))
+
+```
+
+**Preguntas:** a) ¿Qué es más grande, la variación **entre lotes** o la diferencia
+**entre medidores** dentro de un lote? b) ¿Las diferencias tienen casi siempre el mismo
+signo?
+
+*Análisis:*
+
+## Supuesto de normalidad
+
+En la prueba pareada el supuesto se verifica sobre las **diferencias**.
+
+```{r e2-normalidad}
+# Pista — gráfico Q-Q y prueba de Shapiro-Wilk de la diferencia:
+# ggplot(ph, aes(sample = ___)) + geom_qq() + geom_qq_line(colour = "red")
+# shapiro.test(ph$___)
+
+```
+
+*Análisis:*
+
+## ¿El medidor de planta tiene sesgo?
+
+Plantea las hipótesis y realiza la prueba **pareada**.
+
+$H_0$: … $\qquad H_1$: …
+
+```{r e2-pareada}
+# Pista — prueba t pareada (el orden importa: planta menos laboratorio):
+# prueba_par <- t.test(ph$___, ph$___, paired = ___)
+# prueba_par
+
+```
+
+**Preguntas:** a) Lee la salida línea por línea: tipo de prueba, $t_0$, gl, valor p,
+alternativa, IC y estimación (`mean difference`). b) Decide y concluye: ¿el medidor de
+planta lee más alto o más bajo que el de laboratorio? ¿Cuánto en promedio?
+
+*Análisis:*
+
+## ¿El sesgo es aceptable (±0.10)?
+
+Que exista sesgo no significa que sea **inaceptable**. Compara el **IC del 95 %** del
+sesgo medio con el límite de ±0.10.
+
+```{r e2-limite}
+# Pista — extraer el IC de la prueba anterior y compararlo con 0.10:
+# prueba_par$conf.int
+# prueba_par$conf.int[2] <= 0.10    # ¿la cota superior queda dentro del límite?
+
+```
+
+**Preguntas:** a) ¿El IC queda completamente dentro de [−0.10, 0.10]? b) ¿Puedes
+**asegurar** con 95 % de confianza que el sesgo es aceptable? Explica por qué esta es una
+pregunta distinta a la de la prueba anterior.
+
+*Análisis:*
+
+## ¿Qué pasa si se analiza mal (como muestras independientes)?
+
+```{r e2-incorrecto}
+# Pista — misma prueba pero SIN emparejar (es el análisis incorrecto):
+# t.test(ph$___, ph$___)
+
+```
+
+**Preguntas:** a) Compara el valor p y el ancho del IC con los del análisis pareado.
+b) ¿Por qué el análisis independiente **no detecta** el sesgo? (Pista: piensa en qué
+variabilidad queda en el error estándar).
+
+*Análisis:*
+
+## Recomendación
+
+**Pregunta:** en 3–4 líneas, ¿qué le recomiendas al jefe de calidad sobre el medidor de
+planta? (¿se puede usar tal como está, hay que calibrarlo, hay que tomar más datos?)
+
+*Análisis:*

@@ -1,0 +1,142 @@
+---
+title: "Solución · Taller de aplicación — Inferencia estadística"
+subtitle: "Uso exclusivo del docente"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 7, fig.height = 4, fig.align = "center")
+library(tidyverse); library(knitr); library(car)
+theme_set(theme_minimal(base_size = 12))
+datos <- "../../sesion-2-inferencia-regresion/datos/"
+fp <- function(p) format.pval(p, digits = 3, eps = 0.001)  # p < 0.001
+```
+
+# Ejercicio 1 · Soldadura (respuestas esperadas)
+
+```{r e1}
+sold <- read_csv(paste0(datos, "soldadura-procedimientos.csv"))
+actual <- sold |> filter(procedimiento == "actual") |> pull(resistencia_mpa)
+nuevo  <- sold |> filter(procedimiento == "nuevo")  |> pull(resistencia_mpa)
+
+resumen <- sold |> group_by(procedimiento) |>
+  summarise(n = n(), media = mean(resistencia_mpa), s = sd(resistencia_mpa),
+            min = min(resistencia_mpa), bajo_480 = sum(resistencia_mpa < 480),
+            shapiro_p = shapiro.test(resistencia_mpa)$p.value)
+kable(resumen, digits = 3)
+
+t_act <- t.test(actual, mu = 480, alternative = "greater")
+t_nue <- t.test(nuevo,  mu = 480, alternative = "greater")
+frac  <- c(actual = pnorm(480, mean(actual), sd(actual)), nuevo = pnorm(480, mean(nuevo), sd(nuevo)))
+f     <- var.test(actual, nuevo)
+lev   <- leveneTest(resistencia_mpa ~ factor(procedimiento), data = sold)
+w     <- t.test(nuevo, actual, alternative = "greater")
+s_comb <- sqrt((var(actual) + var(nuevo)) / 2)
+pot   <- power.t.test(n = 16, delta = 5, sd = s_comb, alternative = "one.sided")$power
+n90   <- ceiling(power.t.test(power = 0.90, delta = 5, sd = s_comb, alternative = "one.sided")$n)
+```
+
+**1.1 Descripción.** El nuevo tiene mayor media (`r round(mean(nuevo), 1)` vs.
+`r round(mean(actual), 1)` MPa) y menor dispersión ($s$ = `r round(sd(nuevo), 2)` vs.
+`r round(sd(actual), 2)`). Probetas bajo 480: actual = `r resumen$bajo_480[1]`, nuevo =
+`r resumen$bajo_480[2]`. Normalidad aceptable en ambos (Shapiro p =
+`r round(resumen$shapiro_p[1], 3)` y `r round(resumen$shapiro_p[2], 3)`; Q-Q alineados).
+
+**1.2 Media vs. mínimo.** $H_0: \mu \le 480$ vs. $H_1: \mu > 480$ (unilateral derecha,
+porque se quiere **demostrar** que se supera el mínimo). Actual: $t_0$ =
+`r round(t_act$statistic, 2)`, gl = 15, p = `r fp(t_act$p.value)`; nuevo: $t_0$ =
+`r round(t_nue$statistic, 2)`, p = `r fp(t_nue$p.value)`. Ambos rechazan $H_0$.
+IC unilaterales: media ≥ `r round(t_act$conf.int[1], 1)` (actual) y ≥
+`r round(t_nue$conf.int[1], 1)` MPa (nuevo).
+
+**1.3 Fracción bajo 480.** Actual ≈ `r round(1000 * frac[1], 1)` por mil; nuevo ≈
+`r round(1000 * frac[2], 1)` por mil. **Idea clave:** cumplir en promedio no basta, el
+requisito es por unión; con el procedimiento actual ≈ `r round(100 * frac[1], 1)` % de las
+uniones fallaría.
+
+**1.4 Varianzas.** $H_0: \sigma^2_{\text{actual}} = \sigma^2_{\text{nuevo}}$ (bilateral).
+$F$ = `r round(f$statistic, 2)` (actual/nuevo, por el orden de los argumentos), p =
+`r round(f$p.value, 3)`; IC para la razón [`r round(f$conf.int, 2)`] contiene **1** → no se
+rechaza. Levene p = `r round(lev[1, 3], 3)`. Pero la razón estimada (≈
+`r round(f$statistic, 1)`) es grande en la práctica: con 16 probetas la prueba $F$ tiene
+poca potencia. Se valora que el estudiante lo note y no concluya "varianzas iguales".
+
+**1.5 Medias.** $H_0: \mu_{\text{nuevo}} \le \mu_{\text{actual}}$ vs.
+$H_1: \mu_{\text{nuevo}} > \mu_{\text{actual}}$. Independientes porque son probetas
+distintas. Welch: $t_0$ = `r round(w$statistic, 2)`, gl = `r round(w$parameter, 1)` (no
+enteros por la fórmula de Welch), p = `r fp(w$p.value)` → se rechaza. Mejora de al
+menos `r round(w$conf.int[1], 1)` MPa con 95 % de confianza.
+
+**1.6 Potencia.** Con $s_p$ ≈ `r round(s_comb, 2)` MPa, potencia para 5 MPa ≈
+`r round(pot, 2)`; para 0.90 se necesitan ≈ `r n90` probetas por procedimiento.
+
+**1.7 Recomendación esperada.** Adoptar el procedimiento nuevo: mayor resistencia media
+(mejora demostrada) y, sobre todo, **mucho menor fracción bajo el mínimo**, que es lo que
+le importa al cliente. Confirmar la reducción de variabilidad con más probetas.
+
+# Ejercicio 2 · Medidores de pH (código y respuestas)
+
+```{r e2-datos}
+ph <- read_csv(paste0(datos, "ph-medidores.csv")) |>
+  mutate(diferencia = ph_planta - ph_laboratorio)
+```
+
+**Datos pareados:** cada lote se mide con los dos medidores.
+
+```{r e2-grafico}
+ph |>
+  pivot_longer(c(ph_laboratorio, ph_planta), names_to = "medidor", values_to = "valor_ph") |>
+  ggplot(aes(x = medidor, y = valor_ph, group = lote)) +
+  geom_line(colour = "grey60") + geom_point(size = 2) +
+  labs(x = NULL, y = "pH", title = "Cada línea es un lote")
+c(n = nrow(ph), media = mean(ph$diferencia), s = sd(ph$diferencia),
+  diferencias_positivas = sum(ph$diferencia > 0)) |> round(4)
+```
+
+La variación entre lotes (pH de ≈ 3.3 a 4.0) es mucho mayor que la diferencia entre
+medidores; las diferencias son casi todas positivas.
+
+```{r e2-normalidad}
+ggplot(ph, aes(sample = diferencia)) + geom_qq() + geom_qq_line(colour = "red")
+shapiro.test(ph$diferencia)
+```
+
+```{r e2-pareada}
+prueba_par <- t.test(ph$ph_planta, ph$ph_laboratorio, paired = TRUE)
+prueba_par
+```
+
+$H_0: \mu_d = 0$ vs. $H_1: \mu_d \ne 0$. Se rechaza (p =
+`r fp(prueba_par$p.value)`): el medidor de planta lee en promedio
+`r round(prueba_par$estimate, 3)` unidades de pH **más alto**.
+
+```{r e2-limite}
+prueba_par$conf.int
+prueba_par$conf.int[2] <= 0.10
+```
+
+**Clave de la pregunta.** El IC [`r round(prueba_par$conf.int, 3)`] queda dentro de
+[−0.10, 0.10] solo en el límite: la cota superior (`r round(prueba_par$conf.int[2], 4)`)
+**toca o supera ligeramente** 0.10. No se puede **asegurar** con 95 % de confianza que el
+sesgo sea aceptable. Es una pregunta distinta: la prueba anterior pregunta si hay sesgo
+(¿contiene el IC al 0?); esta pregunta si el sesgo es tolerable (¿cabe el IC dentro de los
+límites?).
+
+```{r e2-incorrecto}
+t.test(ph$ph_planta, ph$ph_laboratorio)
+```
+
+El análisis independiente no detecta el sesgo (p ≈
+`r round(t.test(ph$ph_planta, ph$ph_laboratorio)$p.value, 2)`): la variabilidad
+**entre lotes** queda en el error estándar y tapa la diferencia entre medidores.
+
+**Recomendación esperada.** Calibrar el medidor de planta (corregir ≈
+`r round(prueba_par$estimate, 2)` unidades) antes de usarlo para liberar lotes; después
+de calibrar, repetir la verificación con más lotes para confirmar que el sesgo queda dentro
+de ±0.10.

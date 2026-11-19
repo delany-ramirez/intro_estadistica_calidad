@@ -12,6 +12,7 @@
 | [`soluciones/pre-trabajo-1-sol.Rmd`](soluciones/pre-trabajo-1-sol.Rmd) | Solución del Pre-trabajo 1 |
 | [`soluciones/pre-trabajo-2-sol.Rmd`](soluciones/pre-trabajo-2-sol.Rmd) | Solución del Pre-trabajo 2 |
 | [`soluciones/taller-integrador-1-sol.Rmd`](soluciones/taller-integrador-1-sol.Rmd) | Solución y rúbrica detallada del Taller integrador 1 (20 %) |
+| [`soluciones/taller-inferencia-sol.Rmd`](soluciones/taller-inferencia-sol.Rmd) | Solución del Taller de aplicación de inferencia (Sesión 2, versión intensiva) |
 | [`evaluacion/evaluacion-individual.md`](evaluacion/evaluacion-individual.md) | Enunciado de la evaluación individual (50 %) |
 | [`evaluacion/evaluacion-individual_plantilla.Rmd`](evaluacion/evaluacion-individual_plantilla.Rmd) | Plantilla de entrega para los estudiantes |
 | [`evaluacion/evaluacion-individual-sol.Rmd`](evaluacion/evaluacion-individual-sol.Rmd) | Solución parametrizada (versión A o B) |

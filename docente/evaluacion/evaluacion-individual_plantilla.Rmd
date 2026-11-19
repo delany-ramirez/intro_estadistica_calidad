@@ -14,7 +14,6 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width =
 library(tidyverse)
 library(knitr)
 library(car)
-library(broom)
 theme_set(theme_minimal(base_size = 12))
 ```
 
@@ -65,35 +64,41 @@ $H_0$: … $\qquad H_1$: …
 
 *Conclusión:*
 
-# Pregunta 3 — Modelo de regresión
+# Pregunta 3 — ¿Cumple cada máquina la especificación?
 
-## a) Modelo
+## a) IC para la media y la desviación estándar
 
 ```{r p3a}
 
 ```
 
-*Ecuación:*
+## b) Prueba para la media (objetivo 28.0 g)
 
-## b) Interpretación
+$H_0$: … $\qquad H_1$: …
 
-*Respuesta:*
-
-## c) Comparación con la Pregunta 2
-
-*Respuesta:*
-
-## d) Predicción
-
-```{r p3d}
+```{r p3b}
 
 ```
 
+*Decisión, conclusión y coherencia con el IC:*
+
+## c) Prueba para la desviación estándar (requisito $\sigma \le 0.2$ g)
+
+$H_0$: … $\qquad H_1$: …
+
+```{r p3c}
+
+```
+
+*Decisión, conclusión y fracción estimada fuera de tolerancia:*
+
+## d) ¿Centrado o variabilidad?
+
 *Respuesta:*
 
-# Pregunta 4 — Validación
+# Pregunta 4 — Planeación del estudio
 
-## a) Diagnóstico
+## a) Potencia
 
 ```{r p4a}
 
@@ -101,6 +106,14 @@ $H_0$: … $\qquad H_1$: …
 
 *Respuesta:*
 
-## b) Recomendación
+## b) Tamaño de muestra
+
+```{r p4b}
+
+```
+
+*Respuesta:*
+
+## c) Conclusión y recomendación
 
 *Respuesta:*

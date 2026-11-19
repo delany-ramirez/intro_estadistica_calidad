@@ -211,6 +211,24 @@ guardar(data.frame(entrega = 1:n, cajas = cajas, distancia_m = dist,
                    tiempo_min = round(tiempo, 1)),
         "sesion-2-inferencia-regresion/datos/tiempo-entrega.csv")
 
+# S2 · Taller de aplicación, ejercicio 1: resistencia a la tracción (MPa) de uniones
+# soldadas con el procedimiento actual y uno nuevo. Requisito mínimo 480 MPa.
+set.seed(311)
+guardar(data.frame(
+  procedimiento = rep(c("actual", "nuevo"), each = 16),
+  resistencia_mpa = round(c(rnorm(16, 492, 9.5), rnorm(16, 500, 5.5)), 1)),
+  "sesion-2-inferencia-regresion/datos/soldadura-procedimientos.csv")
+
+# S2 · Taller de aplicación, ejercicio 2: pH de 15 lotes de jugo medido con el medidor
+# de planta y con el de laboratorio (referencia). Sesgo admisible ±0.10 unidades de pH.
+set.seed(312)
+ph_real <- runif(15, 3.3, 4.0)
+guardar(data.frame(
+  lote = 1:15,
+  ph_laboratorio = round(ph_real + rnorm(15, 0, 0.02), 2),
+  ph_planta = round(ph_real + 0.06 + rnorm(15, 0, 0.045), 2)),
+  "sesion-2-inferencia-regresion/datos/ph-medidores.csv")
+
 # -----------------------------------------------------------------------------
 # DOCENTE · Evaluación individual (dos versiones con parámetros distintos)
 # -----------------------------------------------------------------------------
